@@ -1,15 +1,15 @@
-# fly.toml app configuration file generated for bot-guardia-bj3cvw on 2026-10-30T19:24:42Z
+# fly.toml app configuration file generated for bot-guardia-bl4vbw on 2026-10-30T19:33:27Z
 #
 # See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 #
 
-app = 'bot-guardia-bj3cvw'
+app = 'bot-guardia-bl4vbw'
 primary_region = 'ams'
 
 [build]
 
 [http_service]
-  internal_port = 5000
+  internal_port = 8080
   force_https = true
   auto_stop_machines = 'off'
   auto_start_machines = true
