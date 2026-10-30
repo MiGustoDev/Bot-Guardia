@@ -1,0 +1,23 @@
+[
+  {
+    "id": "1",
+    "trigger": "maxirest",
+    "reply": "Recibido. ¿La falla de Maxirest es en un punto de venta específico o en la base/servidor del local? Pasame el nro de sucursal.",
+    "type": "contains",
+    "active": true
+  },
+  {
+    "id": "2",
+    "trigger": "impresora",
+    "reply": "Entendido. Verificá si la comandera tiene papel, luz verde de error fija/parpadeando y si está encendida. Indicanos nro de sucursal.",
+    "type": "contains",
+    "active": true
+  },
+  {
+    "id": "3",
+    "trigger": "internet",
+    "reply": "Avisado. ¿El modem tiene las luces de Online/Internet en verde? Por favor confirma sucursal y si afecta a los posnets.",
+    "type": "contains",
+    "active": true
+  }
+]

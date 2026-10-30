@@ -1,0 +1,12 @@
+{
+  "watch": ["index.js"],
+  "ext": "js",
+  "ignore": [
+    "rules.json",
+    "config.json",
+    ".wwebjs_auth/**",
+    ".wwebjs_cache/**",
+    "node_modules/**",
+    "*.log"
+  ]
+}

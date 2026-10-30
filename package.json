@@ -1,0 +1,15 @@
+{
+  "name": "tukibot",
+  "version": "1.0.0",
+  "description": "WhatsApp Auto-Reply Bot with React Dashboard",
+  "main": "index.js",
+  "scripts": {
+    "install:all": "npm install && npm install --prefix server && npm install --prefix client",
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:server": "npm run dev --prefix server",
+    "dev:client": "npm run dev --prefix client"
+  },
+  "dependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

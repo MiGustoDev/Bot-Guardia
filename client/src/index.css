@@ -1,0 +1,8 @@
+/* Sin estilos complejos */
+body {
+  font-family: sans-serif;
+  padding: 20px;
+  margin: 0;
+  background: #ffffff;
+  color: #000000;
+}

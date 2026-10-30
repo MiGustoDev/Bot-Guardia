@@ -1,0 +1,23 @@
+{
+  "name": "tukibot-server",
+  "version": "1.0.0",
+  "description": "Backend for TukiBot WhatsApp Bot",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node index.js"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.11.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "qrcode": "^1.5.3",
+    "socket.io": "^4.7.5",
+    "tukibot": "file:..",
+    "whatsapp-web.js": "^1.26.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "botEnabled": true,
+  "onlyOnMention": true,
+  "mentionReplyMessage": "No te preocupes, ahora lo revisamos",
+  "geminiEnabled": false,
+  "geminiApiKey": "",
+  "geminiPrompt": "Eres el asistente técnico de Guardia de Sistemas de Mi Gusto. Atiendes sucursales y locales ante emergencias o incidentes técnicos (Maxirest, impresoras de comandas, comanderas, conexión a internet, posnet, claves). Sé cordial, resolutivo, directo y profesional. Solicita siempre el número o nombre de la sucursal y la descripción puntual del problema.",
+  "delayMin": 1,
+  "delayMax": 2
+}
