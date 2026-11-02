@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -172,11 +173,22 @@ function initWhatsApp() {
     logActivity('system', 'System', `Error de autenticación: ${msg}`, '', false);
   });
 
-  client.on('disconnected', (reason) => {
-    console.log('Client was logged out:', reason);
+  client.on('disconnected', async (reason) => {
+    console.log('Client was logged out or connection lost:', reason);
     currentQr = null;
     updateStatus('DISCONNECTED');
-    logActivity('system', 'System', `Desconectado: ${reason}`, '', false);
+    logActivity('system', 'System', `Desconectado (${reason}). Reintentando conexión automática sin perder sesión...`, '', false);
+
+    // Si fue un cierre temporal o caída de red, reiniciar cliente manteniendo la carpeta LocalAuth intacta
+    try {
+      await client.destroy().catch(() => {});
+    } catch (_) {}
+    
+    // Esperar 5 segundos antes de reintentar para no saturar
+    setTimeout(() => {
+      console.log('[Reconexión Automática] Levantando cliente WhatsApp...');
+      initWhatsApp();
+    }, 5000);
   });
 
   client.on('message_create', async (msg) => {
@@ -273,7 +285,7 @@ function initWhatsApp() {
 
       // Si fue mencionado en grupo o modo onlyOnMention activo
       if (isMentioned || (config.onlyOnMention && isGroup)) {
-        const responsePlan = knowledge.getGuardiaMentionResponse({ incomingText, chatTitle });
+        const responsePlan = await knowledge.getGuardiaMentionResponse({ incomingText, chatTitle });
         const chatId = msg.from;
         const senderId = msg.author || msg.from; // ID de quien arrobó en el grupo
 

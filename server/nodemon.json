@@ -1,9 +1,12 @@
 {
-  "watch": ["index.js"],
+  "watch": ["index.js", "knowledge.js"],
   "ext": "js",
   "ignore": [
     "rules.json",
     "config.json",
+    "guardia_state.json",
+    ".env",
+    ".env.*",
     ".wwebjs_auth/**",
     ".wwebjs_cache/**",
     "node_modules/**",

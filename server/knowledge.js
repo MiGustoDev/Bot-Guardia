@@ -362,7 +362,7 @@ function getRandomGreeting(date = new Date()) {
 }
 
 // ==========================================
-// 7. GENERADOR DE RESPUESTA DE CHARLA
+// 7. GENERADOR DE RESPUESTA DE CHARLA (ESTÁTICO / FALLBACK)
 // ==========================================
 /**
  * Genera el segundo mensaje variando entre las 3 frases requeridas.
@@ -376,22 +376,66 @@ function getRandomAcknowledgement() {
   return options[Math.floor(Math.random() * options.length)];
 }
 
+/**
+ * Generador opcional con Gemini AI.
+ * Si GEMINI_API_KEY está configurada en .env o en config.json, genera una confirmación
+ * humana y adaptada al mensaje. Si no hay key o falla, usa el fallback estático.
+ */
+const GEMINI_SYSTEM_INSTRUCTION = `
+Sos parte del equipo de soporte técnico de Sistemas (Facu y Ramiro) que atiende sucursales y franquicias en Argentina.
+- Tu rol es confirmar de forma humana y breve que recibiste el aviso y que lo estás revisando.
+- Hablá como un técnico de guardia real respondiendo por WhatsApp desde el celular.
+- NUNCA uses signos de apertura (¡ o ¿).
+- NUNCA uses saludos corporativos ("Estimado", "Cordial saludo", "Estoy para ayudarte").
+- Respuestas de UNA SOLA ORACIÓN, cortas, directas y tranquilizadoras.
+- Ejemplos de estilo: "Ahi lo miramos con los chicos, dame unos minutos", "Recibido, ya me pongo a revisar qué pasó con eso", "Tranqui, ahora le pego un ojo al sistema", "Anotado, ya lo estamos chequeando".
+`;
+
+async function getGeminiAcknowledgement(incomingText = '', branchName = '') {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) return null;
+
+  try {
+    const { GoogleGenAI } = require('@google/generative-ai');
+    const ai = new GoogleGenAI({ apiKey });
+    const model = ai.getGenerativeModel({
+      model: 'gemini-1.5-flash',
+      systemInstruction: GEMINI_SYSTEM_INSTRUCTION
+    });
+
+    const prompt = `Sucursal: ${branchName || 'Local'}\nMensaje reportado: "${incomingText}"\nResponde solo con la confirmación de revisión en una línea:`;
+    
+    // Timeout de seguridad de 3 segundos para que el bot nunca quede colgado
+    const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Gemini timeout')), 3000));
+    const result = await Promise.race([model.generateContent(prompt), timeoutPromise]);
+    
+    let text = result.response.text().trim();
+    // Limpieza de comillas o signos de apertura
+    text = text.replace(/^[¡¿"\s]+|[!"\s]+$/g, '').trim();
+    if (text) return text;
+  } catch (err) {
+    console.warn('[Gemini AI Warning] No se pudo obtener respuesta de Gemini, usando fallback humano:', err.message);
+  }
+  return null;
+}
+
 // ==========================================
 // 8. PLAN COMPLETO DE RESPUESTA EN GRUPO
 // ==========================================
 /**
  * Genera el paquete completo de mensajes a enviar al grupo cuando arroban a sistemas:
  * - Mensaje 1: Saludo contextual
- * - Mensaje 2: Confirmación de revisión
- * - Mensaje 3 (Opcional): Pregunta por la sucursal si no se detectó ninguna en el mensaje ni en el grupo
+ * - Mensaje 2: Confirmación de revisión (vía Gemini si está disponible en .env, sino fallback humano)
  */
-function getGuardiaMentionResponse(context = {}) {
+async function getGuardiaMentionResponse(context = {}) {
   const { incomingText = '', chatTitle = '' } = context;
 
   const detectedBranch = detectBranch(incomingText, chatTitle);
 
   const msg1Text = getRandomGreeting();
-  const msg2Text = getRandomAcknowledgement();
+  // Intenta consultar a Gemini si está configurado en .env; si no, usa el acuse estándar
+  const geminiText = await getGeminiAcknowledgement(incomingText, detectedBranch);
+  const msg2Text = geminiText || getRandomAcknowledgement();
 
   // El bot solo responde los 2 mensajes humanos: Saludo + Confirmación
   const messages = [
