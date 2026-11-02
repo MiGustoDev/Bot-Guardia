@@ -40,6 +40,7 @@ const CONFIG_PATH = path.join(__dirname, 'config.json');
 let botStatus = 'DISCONNECTED'; // DISCONNECTED, CONNECTING, QR_READY, CONNECTED
 let currentQr = null;
 let activityLog = [];
+const botStartTime = Date.now();
 
 // Helper functions for storage
 function readRules() {
@@ -146,24 +147,42 @@ function initWhatsApp() {
     }
     logActivity('system', 'System', '¡Bot conectado y listo para recibir mensajes!', '');
 
-    // Chequeo de rotación semanal automática al conectar y cada 15 minutos
+    // Chequeo de rotación semanal automática y reporte de cierre los lunes a las 09:00 hs
     const checkAndNotifyRotation = async () => {
       try {
         const rotation = knowledge.checkWeeklyAutoRotation();
         if (rotation && rotation.rotated) {
+          // 1. Enviar el Reporte Semanal de Cierre al técnico saliente (y también al entrante si son diferentes)
+          if (rotation.reportMsg && rotation.outgoingPhone) {
+            const outgoingJid = `${rotation.outgoingPhone}@c.us`;
+            await client.sendMessage(outgoingJid, rotation.reportMsg);
+            console.log(`[Reporte Semanal Enviado] Reporte enviado al técnico saliente: ${rotation.outgoingTechName} (${rotation.outgoingPhone})`);
+          }
+
+          // 2. Notificar al técnico entrante que asume la guardia
           const rotationMsg = `🔔 *Rotación Automática de Guardia*\n\nHola ${rotation.techName}, a partir de hoy lunes te corresponde la guardia de Sistemas de la semana. Las alertas de las sucursales te llegarán a vos.`;
           const targetJid = `${rotation.phone}@c.us`;
           await client.sendMessage(targetJid, rotationMsg);
-          console.log(`[Rotación Notificada] Mensaje enviado a ${rotation.techName} (${rotation.phone})`);
+          console.log(`[Rotación Notificada] Mensaje enviado al nuevo técnico: ${rotation.techName} (${rotation.phone})`);
         }
       } catch (err) {
-        console.error('Error en chequeo de rotación automática:', err);
+        console.error('Error en chequeo de rotación automática y reporte semanal:', err);
       }
     };
 
     // Ejecutar chequeo inicial y programar cada 15 minutos
     checkAndNotifyRotation();
     setInterval(checkAndNotifyRotation, 15 * 60 * 1000);
+
+    // Limpieza automática preventiva de caché de Chromium cada 24 horas
+    knowledge.cleanChromiumCache();
+    setInterval(() => {
+      try {
+        knowledge.cleanChromiumCache();
+      } catch (err) {
+        console.error('Error en limpieza periódica de caché:', err);
+      }
+    }, 24 * 60 * 60 * 1000);
   });
 
   client.on('auth_failure', (msg) => {
@@ -267,12 +286,13 @@ function initWhatsApp() {
 
       console.log(`[Message Received] [${chatTitle}] From: ${senderName} (${fromNumber}): ${incomingText}`);
 
-      // 0. Si es un mensaje privado, verificar si un técnico está asignando la guardia semanal
+      // 0. Si es un mensaje privado, verificar comandos de diagnóstico o asignación de guardia (#ping, #guardia, etc.)
       if (!isGroup) {
-        const assignmentReply = knowledge.checkGuardiaAssignment(incomingText, fromNumber);
-        if (assignmentReply) {
-          await msg.reply(assignmentReply);
-          console.log(`[Guardia Assignment] ${assignmentReply}`);
+        const commandReply = knowledge.processTechCommand(incomingText, fromNumber, botStartTime);
+        if (commandReply) {
+          await msg.reply(commandReply);
+          console.log(`[Tech Command / Assignment] Respondido: ${commandReply}`);
+          logActivity('outgoing', 'Bot (Comando Técnico)', incomingText, commandReply);
           return;
         }
       }
@@ -382,6 +402,10 @@ function initWhatsApp() {
                 `*De:* ${senderName}\n` +
                 `*Sucursal:* ${branchName}\n` +
                 `*Mensaje:* "${incomingText}"`;
+
+              // Registrar métrica para el reporte de cierre semanal del lunes
+              const isWeekend = (new Date().getDay() === 0 || new Date().getDay() === 6);
+              knowledge.recordWeeklyAlert(branchName, isWeekend);
 
               for (const techPhone of activeTechs) {
                 const techJid = `${techPhone}@c.us`;

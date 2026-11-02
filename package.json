@@ -7,7 +7,12 @@
     "install:all": "npm install && npm install --prefix server && npm install --prefix client",
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
     "dev:server": "npm run dev --prefix server",
-    "dev:client": "npm run dev --prefix client"
+    "dev:client": "npm run dev --prefix client",
+    "pm2:start": "pm2 start ecosystem.config.js",
+    "pm2:stop": "pm2 stop bot-sistemas",
+    "pm2:restart": "pm2 restart bot-sistemas",
+    "pm2:logs": "pm2 logs bot-sistemas",
+    "pm2:monit": "pm2 monit"
   },
   "dependencies": {
     "concurrently": "^8.2.2"

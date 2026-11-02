@@ -161,10 +161,47 @@ function setGuardiaState(techKey, extra = {}) {
 }
 
 /**
- * ROTACIÓN AUTOMÁTICA SEMANAL:
+ * REGISTRO SEMANAL DE ALERTAS E INCIDENTES
+ * Almacena métricas de la semana actual dentro de guardia_state.json:
+ * - Total de alertas
+ * - Alertas en fin de semana vs día de semana
+ * - Sucursales más activas
+ */
+function recordWeeklyAlert(branchName = 'No especificada', isWeekend = false) {
+  try {
+    const state = getGuardiaState();
+    if (!state.weeklyStats) {
+      state.weeklyStats = {
+        totalAlerts: 0,
+        weekendAlerts: 0,
+        weekdayAlerts: 0,
+        branches: {}
+      };
+    }
+
+    state.weeklyStats.totalAlerts = (state.weeklyStats.totalAlerts || 0) + 1;
+    if (isWeekend) {
+      state.weeklyStats.weekendAlerts = (state.weeklyStats.weekendAlerts || 0) + 1;
+    } else {
+      state.weeklyStats.weekdayAlerts = (state.weeklyStats.weekdayAlerts || 0) + 1;
+    }
+
+    const branchKey = branchName || 'No especificada';
+    state.weeklyStats.branches[branchKey] = (state.weeklyStats.branches[branchKey] || 0) + 1;
+
+    setGuardiaState(state.assigned, state);
+  } catch (err) {
+    console.error('Error registrando alerta semanal:', err);
+  }
+}
+
+/**
+ * ROTACIÓN AUTOMÁTICA SEMANAL Y REPORTE DE CIERRE:
  * Se chequea periódicamente. Si es Lunes y ya pasaron las 09:00 hs,
- * y no se ha rotado en la semana actual (usando 'lastRotationWeek'), rota entre 'facu' y 'ramiro'.
- * Retorna un objeto { rotated: true, newTech: 'facu'|'ramiro', techName: string, phone: string } o null.
+ * y no se ha rotado en la semana actual (usando 'lastRotationWeek'):
+ * 1. Genera el reporte de la semana que termina para el técnico saliente y entrante.
+ * 2. Rota la guardia entre 'facu' y 'ramiro'.
+ * 3. Reinicia las métricas para la nueva semana.
  */
 function checkWeeklyAutoRotation(date = new Date()) {
   const day = date.getDay(); // 1 = Lunes
@@ -184,24 +221,65 @@ function checkWeeklyAutoRotation(date = new Date()) {
 
   const state = getGuardiaState();
   if (state.lastRotationWeek === currentWeekKey) {
-    // Ya se rotó automáticamente este lunes
+    // Ya se rotó y se reportó automáticamente este lunes
     return null;
   }
 
-  // Decidir quién sigue: si la anterior fue facu -> le toca a ramiro, y viceversa
-  const currentAssigned = state.assigned || 'facu';
-  const nextAssigned = currentAssigned === 'facu' ? 'ramiro' : 'facu';
+  // Identificar técnico anterior (saliente) y siguiente (entrante)
+  const previousAssigned = state.assigned || 'facu';
+  const nextAssigned = previousAssigned === 'facu' ? 'ramiro' : 'facu';
+  const outgoingTech = TECNICOS[previousAssigned] || TECNICOS.facu;
+  const incomingTech = TECNICOS[nextAssigned] || TECNICOS.ramiro;
 
-  setGuardiaState(nextAssigned, { lastRotationWeek: currentWeekKey });
+  // Compilar estadísticas de la semana que cerró
+  const stats = state.weeklyStats || {
+    totalAlerts: 0,
+    weekendAlerts: 0,
+    weekdayAlerts: 0,
+    branches: {}
+  };
 
-  const tech = TECNICOS[nextAssigned];
-  console.log(`[Rotación Automática] Lunes 09:00 hs detectado. Se rota guardia a: ${tech.nombre}`);
+  // Ranking de top 3 sucursales con más reportes
+  const topBranches = Object.entries(stats.branches || {})
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .map(([br, count], idx) => `${idx + 1}. *${br}* (${count} ${count === 1 ? 'alerta' : 'alertas'})`)
+    .join('\n');
+
+  const branchesSummary = topBranches ? `\n\n📌 *Sucursales más activas:*\n${topBranches}` : '';
+
+  // Mensaje de Check-in y Reporte de Cierre de Guardia
+  const summaryReportMsg = 
+    `📊 *Reporte Semanal de Guardia - Sistemas*\n\n` +
+    `Hola ${outgoingTech.nombre}, este es el resumen de la guardia que acaba de finalizar:\n\n` +
+    `• *Total de alertas registradas:* ${stats.totalAlerts}\n` +
+    `• *En días hábiles (17:15 a 00:00):* ${stats.weekdayAlerts}\n` +
+    `• *En fin de semana:* ${stats.weekendAlerts}` +
+    `${branchesSummary}\n\n` +
+    `🔄 A partir de ahora toma la guardia semanal *${incomingTech.nombre}*. ¡Buen descanso!`;
+
+  // Reiniciar métricas para la nueva semana y persistir rotación
+  setGuardiaState(nextAssigned, {
+    lastRotationWeek: currentWeekKey,
+    weeklyStats: {
+      totalAlerts: 0,
+      weekendAlerts: 0,
+      weekdayAlerts: 0,
+      branches: {}
+    }
+  });
+
+  console.log(`[Rotación Automática] Lunes 09:00 hs detectado. Se rota guardia de ${outgoingTech.nombre} a ${incomingTech.nombre}`);
 
   return {
     rotated: true,
+    previousTech: previousAssigned,
+    outgoingTechName: outgoingTech.nombre,
+    outgoingPhone: outgoingTech.phone,
     newTech: nextAssigned,
-    techName: tech.nombre,
-    phone: tech.phone
+    techName: incomingTech.nombre,
+    phone: incomingTech.phone,
+    reportMsg: summaryReportMsg
   };
 }
 
@@ -228,6 +306,112 @@ function checkGuardiaAssignment(text = '', senderPhone = '') {
     }
   }
   return null;
+}
+
+/**
+ * 4.0. LIMPIEZA AUTOMÁTICA DE BASURA DE CHROMIUM (Garbage Collection de Disco)
+ * Limpia caches, logs y temporales de Puppeteer dentro de .wwebjs_auth sin tocar
+ * cookies, tokens ni archivos esenciales de la sesión.
+ */
+function cleanChromiumCache() {
+  const sessionDir = path.join(__dirname, '.wwebjs_auth', 'session', 'Default');
+  const cacheDirs = [
+    path.join(sessionDir, 'Cache'),
+    path.join(sessionDir, 'Code Cache'),
+    path.join(sessionDir, 'GPUCache'),
+    path.join(sessionDir, 'Service Worker', 'CacheStorage'),
+    path.join(sessionDir, 'Service Worker', 'ScriptCache'),
+    path.join(__dirname, '.wwebjs_cache')
+  ];
+
+  let freedCount = 0;
+  for (const dir of cacheDirs) {
+    try {
+      if (fs.existsSync(dir)) {
+        fs.rmSync(dir, { recursive: true, force: true });
+        freedCount++;
+      }
+    } catch (e) {
+      // Ignorar archivos en uso por el navegador en este momento
+    }
+  }
+  console.log(`[Disk GC] Limpieza de caché de Chromium completada (${freedCount} directorios procesados).`);
+  return freedCount;
+}
+
+/**
+ * 4.1. CONTROL REMOTO DEL BOT POR WHATSAPP (Comandos de Diagnóstico y Gestión)
+ * Permite a los técnicos autorizados consultar estado, uptime, RAM o cambiar la guardia.
+ */
+function processTechCommand(text = '', senderPhone = '', botStartTime = Date.now()) {
+  const clean = text.trim().toLowerCase();
+
+  // 1. #ping o #status
+  if (clean === '#ping' || clean === '#status' || clean === '#info') {
+    const mem = process.memoryUsage();
+    const ramMB = (mem.rss / 1024 / 1024).toFixed(1);
+    const uptimeSec = Math.floor((Date.now() - botStartTime) / 1000);
+    const days = Math.floor(uptimeSec / 86400);
+    const hours = Math.floor((uptimeSec % 86400) / 3600);
+    const minutes = Math.floor((uptimeSec % 3600) / 60);
+
+    const state = getGuardiaState();
+    const techName = state.assigned ? (TECNICOS[state.assigned]?.nombre || state.assigned) : 'Ambos';
+    const totalAlerts = state.weeklyStats?.totalAlerts || 0;
+
+    return `🤖 *Estado del Bot de Sistemas*\n\n` +
+      `• *Estado:* Online ✅\n` +
+      `• *Técnico de Guardia:* ${techName}\n` +
+      `• *Alertas de la semana:* ${totalAlerts}\n` +
+      `• *Uso de Memoria RAM:* ${ramMB} MB\n` +
+      `• *Uptime:* ${days > 0 ? days + 'd ' : ''}${hours}h ${minutes}m\n` +
+      `• *Horario de Guardia:* 09:00 a 23:59 hs\n` +
+      `• *Alertas activas para técnicos:* Lun-Vie 17:15-23:59 | Sáb-Dom todo el día`;
+  }
+
+  // 2. #guardia
+  if (clean === '#guardia') {
+    const state = getGuardiaState();
+    const current = state.assigned ? (TECNICOS[state.assigned]?.nombre || state.assigned) : 'Ambos (Facu y Ramiro)';
+    return `🛡️ *Guardia Actual:* ${current}\n\nPodés cambiarla enviando:\n• #guardia facu\n• #guardia ramiro\n• #guardia ambos`;
+  }
+
+  // 3. #guardia <nombre>
+  if (clean.startsWith('#guardia ')) {
+    const arg = clean.replace('#guardia ', '').trim();
+    if (arg.includes('facu')) {
+      setGuardiaState('facu');
+      return '✅ Guardia asignada a *Facu*. Las alertas de las sucursales te llegarán a vos.';
+    }
+    if (arg.includes('rami')) {
+      setGuardiaState('ramiro');
+      return '✅ Guardia asignada a *Ramiro*. Las alertas de las sucursales le llegarán a Ramiro.';
+    }
+    if (arg.includes('ambos') || arg.includes('todos')) {
+      setGuardiaState(null);
+      return '✅ Guardia asignada a *Ambos* (Facu y Ramiro).';
+    }
+  }
+
+  // 4. #limpiar (Garbage Collection manual por comando)
+  if (clean === '#limpiar' || clean === '#gc') {
+    cleanChromiumCache();
+    const mem = process.memoryUsage();
+    return `🧹 *Caché de Chromium depurada con éxito!*\nRAM actual: ${(mem.rss / 1024 / 1024).toFixed(1)} MB.`;
+  }
+
+  // 5. #ayuda o #comandos
+  if (clean === '#ayuda' || clean === '#comandos') {
+    return `🛠️ *Comandos de Sistemas Disponibles:*\n\n` +
+      `• *#ping*: Ver estado general, RAM y uptime del bot.\n` +
+      `• *#guardia*: Ver quién tiene la guardia activa.\n` +
+      `• *#guardia facu / ramiro / ambos*: Cambiar la guardia.\n` +
+      `• *#limpiar*: Limpiar caché de disco de Chromium.\n` +
+      `• *la guardia es de [nombre]*: Modificar guardia en lenguaje natural.`;
+  }
+
+  // 6. Lenguaje natural habitual ("la guardia es de...")
+  return checkGuardiaAssignment(text, senderPhone);
 }
 
 /**
@@ -464,12 +648,15 @@ module.exports = {
   isWithinWorkingHours,
   shouldAlertTech,
   checkWeeklyAutoRotation,
+  recordWeeklyAlert,
   checkBranchCooldown,
   detectBranch,
   getRandomGreeting,
   getRandomAcknowledgement,
   getGuardiaMentionResponse,
   checkGuardiaAssignment,
+  processTechCommand,
+  cleanChromiumCache,
   getActiveTechNumbers,
   getGuardiaState,
   setGuardiaState,
