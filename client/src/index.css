@@ -151,3 +151,109 @@ input:focus, textarea:focus, select:focus {
     grid-template-columns: 1fr !important;
   }
 }
+
+/* ========================================================
+   GSAP-Style Animation & Micro-interaction System
+   ======================================================== */
+
+:root {
+  --ease-expo-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-expo-in: cubic-bezier(0.7, 0, 0.84, 0);
+  --ease-back-out: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-power2-out: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-power3-out: cubic-bezier(0.215, 0.61, 0.355, 1);
+}
+
+/* Modal Open (GSAP expo.out) */
+@keyframes gsapModalEnter {
+  0% {
+    opacity: 0;
+    transform: scale(0.92) translateY(20px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* Modal Exit (GSAP expo.in / power2.in) */
+@keyframes gsapModalExit {
+  0% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.92) translateY(20px);
+  }
+}
+
+/* Backdrop Blur & Fade In */
+@keyframes gsapBackdropEnter {
+  0% {
+    opacity: 0;
+    backdrop-filter: blur(0px);
+  }
+  100% {
+    opacity: 1;
+    backdrop-filter: blur(6px);
+  }
+}
+
+/* Backdrop Blur & Fade Out */
+@keyframes gsapBackdropExit {
+  0% {
+    opacity: 1;
+    backdrop-filter: blur(6px);
+  }
+  100% {
+    opacity: 0;
+    backdrop-filter: blur(0px);
+  }
+}
+
+/* GSAP Slide Up with smooth deceleration */
+@keyframes gsapSlideUp {
+  0% {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.gsap-modal-enter {
+  animation: gsapModalEnter 0.32s var(--ease-expo-out) forwards;
+}
+
+.gsap-modal-exit {
+  animation: gsapModalExit 0.22s var(--ease-expo-in) forwards;
+}
+
+.gsap-backdrop-enter {
+  animation: gsapBackdropEnter 0.32s var(--ease-expo-out) forwards;
+}
+
+.gsap-backdrop-exit {
+  animation: gsapBackdropExit 0.22s var(--ease-expo-in) forwards;
+}
+
+.gsap-slide-up {
+  animation: gsapSlideUp 0.38s var(--ease-expo-out) forwards;
+}
+
+/* Springy button micro-interactions */
+button:not(:disabled):active {
+  transform: scale(0.97) !important;
+}
+
+.interactive-card {
+  transition: transform 0.25s var(--ease-power2-out), border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.interactive-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}

@@ -53,6 +53,9 @@ function AutoExpandingTextarea({ value, onChange, placeholder, style = {}, minHe
 }
 
 export default function RulesModal({ isOpen, onClose }) {
+  const [shouldRender, setShouldRender] = useState(isOpen);
+  const [isClosing, setIsClosing] = useState(false);
+
   const [rules, setRules] = useState([]);
   const [config, setConfig] = useState({
     botEnabled: true,
@@ -70,6 +73,42 @@ export default function RulesModal({ isOpen, onClose }) {
   const [savingRules, setSavingRules] = useState(false);
   const [savingConfig, setSavingConfig] = useState(false);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState('');
+
+  // Handle opening and closing transitions
+  useEffect(() => {
+    if (isOpen) {
+      setShouldRender(true);
+      setIsClosing(false);
+    } else if (shouldRender) {
+      setIsClosing(true);
+      const timer = setTimeout(() => {
+        setShouldRender(false);
+        setIsClosing(false);
+      }, 230);
+      return () => clearTimeout(timer);
+    }
+  }, [isOpen]);
+
+  const handleCloseTrigger = () => {
+    if (isClosing) return;
+    setIsClosing(true);
+    setTimeout(() => {
+      onClose();
+      setShouldRender(false);
+      setIsClosing(false);
+    }, 230);
+  };
+
+  // Keyboard Escape listener
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && shouldRender && !isClosing) {
+        handleCloseTrigger();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [shouldRender, isClosing]);
 
   // New rule state
   const [newTrigger, setNewTrigger] = useState('');
@@ -179,37 +218,45 @@ export default function RulesModal({ isOpen, onClose }) {
     }
   };
 
-  if (!isOpen) return null;
+  if (!shouldRender) return null;
 
   return (
-    <div style={{
-      position: 'fixed',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      backgroundColor: 'rgba(0, 0, 0, 0.75)',
-      backdropFilter: 'blur(4px)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      zIndex: 100,
-      padding: '20px'
-    }} className="animate-fade-in">
-      
-      <div style={{
-        backgroundColor: 'var(--wa-bg-panel)',
-        border: '1px solid var(--wa-border-light)',
-        borderRadius: '16px',
-        width: '100%',
-        maxWidth: '820px',
-        maxHeight: '90vh',
+    <div 
+      onClick={(e) => {
+        if (e.target === e.currentTarget) {
+          handleCloseTrigger();
+        }
+      }}
+      className={isClosing ? 'gsap-backdrop-exit' : 'gsap-backdrop-enter'}
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: 'rgba(0, 0, 0, 0.75)',
         display: 'flex',
-        flexDirection: 'column',
-        boxShadow: '0 20px 40px rgba(0, 0, 0, 0.5)',
-        overflow: 'hidden'
-      }}>
-        
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 100,
+        padding: '20px'
+      }}
+    >
+      <div 
+        className={isClosing ? 'gsap-modal-exit' : 'gsap-modal-enter'}
+        style={{
+          backgroundColor: 'var(--wa-bg-panel)',
+          border: '1px solid var(--wa-border-light)',
+          borderRadius: '16px',
+          width: '100%',
+          maxWidth: '820px',
+          maxHeight: '90vh',
+          display: 'flex',
+          flexDirection: 'column',
+          boxShadow: '0 24px 50px rgba(0, 0, 0, 0.65)',
+          overflow: 'hidden'
+        }}
+      >
         {/* Header */}
         <div style={{
           padding: '16px 24px',
@@ -226,7 +273,7 @@ export default function RulesModal({ isOpen, onClose }) {
             </h3>
           </div>
           <button
-            onClick={onClose}
+            onClick={handleCloseTrigger}
             style={{
               background: 'none',
               color: 'var(--wa-text-secondary)',
@@ -235,7 +282,8 @@ export default function RulesModal({ isOpen, onClose }) {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              cursor: 'pointer'
+              cursor: 'pointer',
+              transition: 'all 0.2s'
             }}
             onMouseOver={(e) => e.currentTarget.style.color = 'var(--wa-text-primary)'}
             onMouseOut={(e) => e.currentTarget.style.color = 'var(--wa-text-secondary)'}
@@ -896,7 +944,7 @@ export default function RulesModal({ isOpen, onClose }) {
         }}>
           <span>Los cambios se guardan directamente en el servidor.</span>
           <button
-            onClick={onClose}
+            onClick={handleCloseTrigger}
             style={{
               padding: '6px 14px',
               borderRadius: '6px',

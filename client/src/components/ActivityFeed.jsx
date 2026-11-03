@@ -364,7 +364,7 @@ export default function ActivityFeed({ activityLog, onClearView }) {
                     justifyContent: 'center',
                     margin: '8px 0'
                   }}
-                  className="animate-fade-in"
+                  className="gsap-slide-up"
                 >
                   <div style={{
                     backgroundColor: 'rgba(32, 44, 51, 0.85)',
@@ -400,7 +400,7 @@ export default function ActivityFeed({ activityLog, onClearView }) {
                   gap: '10px',
                   boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)'
                 }}
-                className="animate-fade-in"
+                className="gsap-slide-up interactive-card"
               >
                 {/* Message Header */}
                 <div style={{
