@@ -147,48 +147,45 @@ function App() {
         flexDirection: 'column'
       }}>
         
-        {/* VIEW 1: QR CODE PAIRING (when not connected) */}
-        {status !== 'CONNECTED' ? (
-          <QRConnectView
-            status={status}
-            qrCode={qrCode}
-            onRestart={handleRestart}
-            isRestarting={isRestarting}
-          />
-        ) : (
-          /* VIEW 2: OPERATIONAL DASHBOARD (when connected) */
-          <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column' }}>
-            {/* Top Metrics Strip */}
-            <StatsStrip 
-              activityLog={activityLog} 
-              isSocketConnected={isSocketConnected} 
+        {/* 1. TOP METRICS STRIP (Always visible) */}
+        <StatsStrip 
+          activityLog={activityLog} 
+          isSocketConnected={isSocketConnected} 
+        />
+
+        {/* 2. QR CODE VINCULATION CARD (Visible when not connected) */}
+        {status !== 'CONNECTED' && (
+          <div style={{ marginBottom: '24px' }}>
+            <QRConnectView
+              status={status}
+              qrCode={qrCode}
+              onRestart={handleRestart}
+              isRestarting={isRestarting}
             />
-
-            {/* Main Content Layout: Live Activity Feed (Left) & Guard Info (Right) */}
-            <div 
-              className="dashboard-grid"
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'minmax(0, 1fr) 340px',
-                gap: '24px',
-                alignItems: 'start'
-              }}
-            >
-              
-              {/* Left Column: WhatsApp-styled Live Feed */}
-              <ActivityFeed 
-                activityLog={activityLog} 
-                onClearView={handleClearView} 
-              />
-
-              {/* Right Column: Guard Shift, Protocols & Top Branches */}
-              <SidebarInfo 
-                activityLog={activityLog} 
-              />
-
-            </div>
           </div>
         )}
+
+        {/* 3. OPERATIONAL DASHBOARD (Always visible) */}
+        <div 
+          className="dashboard-grid animate-fade-in"
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'minmax(0, 1fr) 340px',
+            gap: '24px',
+            alignItems: 'start'
+          }}
+        >
+          {/* Left Column: WhatsApp-styled Live Feed */}
+          <ActivityFeed 
+            activityLog={activityLog} 
+            onClearView={handleClearView} 
+          />
+
+          {/* Right Column: Guard Shift, Protocols & Top Branches */}
+          <SidebarInfo 
+            activityLog={activityLog} 
+          />
+        </div>
 
       </main>
 

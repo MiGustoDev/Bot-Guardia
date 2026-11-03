@@ -4,10 +4,8 @@ import { Smartphone, RefreshCw, QrCode, Shield, CheckCircle2, AlertCircle } from
 export default function QRConnectView({ status, qrCode, onRestart, isRestarting }) {
   return (
     <div style={{
-      maxWidth: '960px',
-      margin: '40px auto',
-      padding: '0 20px',
-      width: '100%'
+      width: '100%',
+      margin: '0 0 12px 0'
     }} className="animate-fade-in">
       
       {/* Main Connection Card */}

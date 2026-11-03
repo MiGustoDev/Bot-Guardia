@@ -1,25 +1,154 @@
 import React, { useState, useEffect } from 'react';
-import { X, Sliders, CheckCircle, AlertCircle, Bot, Zap, Clock } from 'lucide-react';
+import { 
+  X, 
+  Sliders, 
+  CheckCircle, 
+  AlertCircle, 
+  Bot, 
+  Plus, 
+  Trash2, 
+  Save, 
+  Check, 
+  ToggleLeft, 
+  ToggleRight, 
+  Key, 
+  Clock, 
+  MessageSquare
+} from 'lucide-react';
 
 export default function RulesModal({ isOpen, onClose }) {
   const [rules, setRules] = useState([]);
-  const [config, setConfig] = useState(null);
+  const [config, setConfig] = useState({
+    botEnabled: true,
+    onlyOnMention: true,
+    mentionReplyMessage: 'No te preocupes, ya lo estamos revisando',
+    geminiEnabled: false,
+    geminiApiKey: '',
+    geminiPrompt: '',
+    delayMin: 1,
+    delayMax: 2
+  });
+
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('rules'); // 'rules', 'config'
+  const [savingRules, setSavingRules] = useState(false);
+  const [savingConfig, setSavingConfig] = useState(false);
+  const [saveSuccessMsg, setSaveSuccessMsg] = useState('');
+
+  // New rule state
+  const [newTrigger, setNewTrigger] = useState('');
+  const [newReply, setNewReply] = useState('');
+  const [newType, setNewType] = useState('contains');
+  const [showAddForm, setShowAddForm] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
       setLoading(true);
+      setSaveSuccessMsg('');
       Promise.all([
         fetch('/api/rules').then(r => r.json()).catch(() => []),
         fetch('/api/config').then(r => r.json()).catch(() => null)
       ]).then(([rulesData, configData]) => {
         setRules(Array.isArray(rulesData) ? rulesData : []);
-        setConfig(configData);
+        if (configData) setConfig(configData);
         setLoading(false);
       });
     }
   }, [isOpen]);
+
+  // Flash success message
+  const triggerSuccess = (msg) => {
+    setSaveSuccessMsg(msg);
+    setTimeout(() => setSaveSuccessMsg(''), 4000);
+  };
+
+  // Toggle active status of a rule
+  const handleToggleRule = (index) => {
+    const updated = [...rules];
+    updated[index].active = !updated[index].active;
+    setRules(updated);
+  };
+
+  // Update rule reply
+  const handleReplyChange = (index, value) => {
+    const updated = [...rules];
+    updated[index].reply = value;
+    setRules(updated);
+  };
+
+  // Delete a rule
+  const handleDeleteRule = (index) => {
+    if (window.confirm('¿Seguro que deseas eliminar esta regla?')) {
+      const updated = rules.filter((_, i) => i !== index);
+      setRules(updated);
+    }
+  };
+
+  // Add new rule
+  const handleAddRule = (e) => {
+    e.preventDefault();
+    if (!newTrigger.trim() || !newReply.trim()) return;
+
+    const newRule = {
+      id: Date.now().toString(),
+      trigger: newTrigger.trim().toLowerCase(),
+      reply: newReply.trim(),
+      type: newType,
+      active: true
+    };
+
+    setRules([newRule, ...rules]);
+    setNewTrigger('');
+    setNewReply('');
+    setShowAddForm(false);
+  };
+
+  // Save all rules to backend
+  const handleSaveRules = async () => {
+    setSavingRules(true);
+    try {
+      const res = await fetch('/api/rules', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(rules)
+      });
+      const data = await res.json();
+      if (data.success) {
+        triggerSuccess('¡Reglas guardadas correctamente en el bot!');
+      } else {
+        alert('Error al guardar: ' + (data.error || 'Desconocido'));
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Error de conexión al guardar las reglas.');
+    } finally {
+      setSavingRules(false);
+    }
+  };
+
+  // Save configuration to backend
+  const handleSaveConfig = async (e) => {
+    if (e) e.preventDefault();
+    setSavingConfig(true);
+    try {
+      const res = await fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config)
+      });
+      const data = await res.json();
+      if (data.success) {
+        triggerSuccess('¡Configuración guardada correctamente!');
+      } else {
+        alert('Error al guardar la configuración.');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Error de conexión al guardar la configuración.');
+    } finally {
+      setSavingConfig(false);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -44,17 +173,17 @@ export default function RulesModal({ isOpen, onClose }) {
         border: '1px solid var(--wa-border-light)',
         borderRadius: '16px',
         width: '100%',
-        maxWidth: '680px',
-        maxHeight: '85vh',
+        maxWidth: '780px',
+        maxHeight: '90vh',
         display: 'flex',
         flexDirection: 'column',
         boxShadow: '0 20px 40px rgba(0, 0, 0, 0.5)',
         overflow: 'hidden'
       }}>
         
-        {/* Modal Header */}
+        {/* Header */}
         <div style={{
-          padding: '18px 24px',
+          padding: '16px 24px',
           borderBottom: '1px solid var(--wa-border)',
           display: 'flex',
           alignItems: 'center',
@@ -64,7 +193,7 @@ export default function RulesModal({ isOpen, onClose }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <Sliders size={20} color="var(--wa-teal)" />
             <h3 style={{ fontSize: '16px', fontWeight: '700', color: 'var(--wa-text-primary)' }}>
-              Reglas y Configuración del Bot
+              Gestor de Respuestas y Configuración
             </h3>
           </div>
           <button
@@ -72,7 +201,6 @@ export default function RulesModal({ isOpen, onClose }) {
             style={{
               background: 'none',
               color: 'var(--wa-text-secondary)',
-              fontSize: '18px',
               padding: '6px'
             }}
             onMouseOver={(e) => e.currentTarget.style.color = 'var(--wa-text-primary)'}
@@ -82,7 +210,25 @@ export default function RulesModal({ isOpen, onClose }) {
           </button>
         </div>
 
-        {/* Tab switch */}
+        {/* Success toast notification */}
+        {saveSuccessMsg && (
+          <div style={{
+            backgroundColor: 'rgba(37, 211, 102, 0.15)',
+            borderBottom: '1px solid var(--wa-green)',
+            color: 'var(--wa-green)',
+            padding: '10px 24px',
+            fontSize: '13px',
+            fontWeight: '600',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px'
+          }}>
+            <Check size={16} />
+            <span>{saveSuccessMsg}</span>
+          </div>
+        )}
+
+        {/* Tab Switch */}
         <div style={{
           display: 'flex',
           borderBottom: '1px solid var(--wa-border)',
@@ -114,13 +260,13 @@ export default function RulesModal({ isOpen, onClose }) {
               borderBottom: activeTab === 'config' ? '2px solid var(--wa-teal)' : '2px solid transparent'
             }}
           >
-            Configuración General & IA
+            Configuración del Bot & IA
           </button>
         </div>
 
-        {/* Modal Body */}
+        {/* Content Body */}
         <div style={{
-          padding: '24px',
+          padding: '20px 24px',
           overflowY: 'auto',
           flex: 1,
           display: 'flex',
@@ -128,174 +274,416 @@ export default function RulesModal({ isOpen, onClose }) {
           gap: '16px'
         }}>
           {loading ? (
-            <p style={{ textAlign: 'center', color: 'var(--wa-text-secondary)', padding: '20px' }}>
-              Cargando información del servidor...
+            <p style={{ textAlign: 'center', color: 'var(--wa-text-secondary)', padding: '24px' }}>
+              Cargando reglas y configuración...
             </p>
           ) : activeTab === 'rules' ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <p style={{ fontSize: '13px', color: 'var(--wa-text-secondary)' }}>
-                Estas reglas responden automáticamente ante palabras clave recurrentes enviadas por las sucursales:
-              </p>
+            /* =================== TAB 1: REGLAS =================== */
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              
+              {/* Top Action Bar for Rules */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '10px'
+              }}>
+                <p style={{ fontSize: '12px', color: 'var(--wa-text-secondary)' }}>
+                  Respuestas automáticas disparadas por palabras clave en los mensajes de las sucursales:
+                </p>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    onClick={() => setShowAddForm(!showAddForm)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '7px 14px',
+                      borderRadius: '8px',
+                      backgroundColor: showAddForm ? 'var(--wa-bg-active)' : 'rgba(0, 168, 132, 0.15)',
+                      color: 'var(--wa-teal)',
+                      fontSize: '12px',
+                      fontWeight: '600',
+                      border: '1px solid var(--wa-teal)'
+                    }}
+                  >
+                    <Plus size={14} />
+                    <span>{showAddForm ? 'Cancelar' : 'Nueva Regla'}</span>
+                  </button>
 
-              {rules.map((rule) => (
-                <div
-                  key={rule.id || rule.trigger}
+                  <button
+                    onClick={handleSaveRules}
+                    disabled={savingRules}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '7px 16px',
+                      borderRadius: '8px',
+                      backgroundColor: 'var(--wa-teal)',
+                      color: '#ffffff',
+                      fontSize: '12px',
+                      fontWeight: '700',
+                      boxShadow: '0 2px 8px rgba(0, 168, 132, 0.3)'
+                    }}
+                  >
+                    <Save size={14} />
+                    <span>{savingRules ? 'Guardando...' : 'Guardar Cambios'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Add Rule Inline Form */}
+              {showAddForm && (
+                <form
+                  onSubmit={handleAddRule}
                   style={{
                     backgroundColor: 'var(--wa-bg-deep)',
-                    border: '1px solid var(--wa-border)',
-                    borderRadius: '10px',
-                    padding: '14px 16px',
+                    border: '1px solid var(--wa-teal)',
+                    borderRadius: '12px',
+                    padding: '16px',
                     display: 'flex',
                     flexDirection: 'column',
-                    gap: '8px'
+                    gap: '12px'
                   }}
+                  className="animate-fade-in"
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{
-                        fontSize: '11px',
-                        fontWeight: '700',
-                        textTransform: 'uppercase',
-                        padding: '2px 8px',
-                        borderRadius: '6px',
-                        backgroundColor: 'rgba(0, 168, 132, 0.15)',
-                        color: 'var(--wa-teal)'
-                      }}>
-                        Palabra Clave:
-                      </span>
-                      <strong style={{ fontSize: '14px', color: 'var(--wa-text-primary)' }}>
-                        "{rule.trigger}"
-                      </strong>
+                  <h4 style={{ fontSize: '13px', fontWeight: '700', color: 'var(--wa-text-primary)' }}>
+                    Agregar Nueva Regla de Contingencia
+                  </h4>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '12px' }}>
+                    <div>
+                      <label style={{ fontSize: '11px', fontWeight: '600', color: 'var(--wa-text-secondary)', display: 'block', marginBottom: '4px' }}>
+                        Palabra Clave (Trigger)
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="ej: posnet, arca, comandera, caja"
+                        value={newTrigger}
+                        onChange={(e) => setNewTrigger(e.target.value)}
+                        required
+                        style={{ width: '100%', padding: '8px 12px', fontSize: '13px' }}
+                      />
                     </div>
-                    <span style={{
-                      fontSize: '11px',
-                      color: rule.active ? 'var(--wa-green)' : 'var(--wa-text-muted)',
-                      fontWeight: '600'
-                    }}>
-                      {rule.active ? '● Activa' : '○ Inactiva'}
-                    </span>
+
+                    <div>
+                      <label style={{ fontSize: '11px', fontWeight: '600', color: 'var(--wa-text-secondary)', display: 'block', marginBottom: '4px' }}>
+                        Coincidencia
+                      </label>
+                      <select
+                        value={newType}
+                        onChange={(e) => setNewType(e.target.value)}
+                        style={{ width: '100%', padding: '8px 12px', fontSize: '13px' }}
+                      >
+                        <option value="contains">Contiene la palabra</option>
+                        <option value="exact">Mensaje exacto</option>
+                        <option value="starts_with">Empieza con</option>
+                      </select>
+                    </div>
                   </div>
 
-                  <div style={{
-                    backgroundColor: 'var(--wa-bubble-out)',
-                    border: '1px solid var(--wa-bubble-out-border)',
-                    borderRadius: '8px',
-                    padding: '10px 12px',
-                    fontSize: '12px',
-                    color: '#ffffff',
-                    lineHeight: '1.4'
-                  }}>
-                    {rule.reply}
+                  <div>
+                    <label style={{ fontSize: '11px', fontWeight: '600', color: 'var(--wa-text-secondary)', display: 'block', marginBottom: '4px' }}>
+                      Respuesta del Bot
+                    </label>
+                    <textarea
+                      placeholder="Escribe la respuesta automática técnica que enviará el bot..."
+                      value={newReply}
+                      onChange={(e) => setNewReply(e.target.value)}
+                      required
+                      rows={3}
+                      style={{ width: '100%', padding: '8px 12px', fontSize: '13px', resize: 'vertical' }}
+                    />
                   </div>
-                </div>
-              ))}
+
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setShowAddForm(false)}
+                      style={{
+                        padding: '6px 12px',
+                        borderRadius: '6px',
+                        backgroundColor: 'transparent',
+                        color: 'var(--wa-text-secondary)',
+                        fontSize: '12px'
+                      }}
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="submit"
+                      style={{
+                        padding: '6px 16px',
+                        borderRadius: '6px',
+                        backgroundColor: 'var(--wa-teal)',
+                        color: '#ffffff',
+                        fontSize: '12px',
+                        fontWeight: '700'
+                      }}
+                    >
+                      Añadir Regla a la Lista
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* Rules List */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {rules.map((rule, idx) => (
+                  <div
+                    key={rule.id || idx}
+                    style={{
+                      backgroundColor: 'var(--wa-bg-deep)',
+                      border: '1px solid ' + (rule.active ? 'var(--wa-border)' : 'rgba(239, 68, 68, 0.2)'),
+                      borderRadius: '12px',
+                      padding: '14px 16px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '10px',
+                      opacity: rule.active ? 1 : 0.65
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <button
+                          onClick={() => handleToggleRule(idx)}
+                          title={rule.active ? 'Desactivar regla' : 'Activar regla'}
+                          style={{
+                            background: 'none',
+                            color: rule.active ? 'var(--wa-green)' : 'var(--wa-text-muted)',
+                            display: 'flex',
+                            alignItems: 'center'
+                          }}
+                        >
+                          {rule.active ? <ToggleRight size={26} /> : <ToggleLeft size={26} />}
+                        </button>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{
+                            fontSize: '11px',
+                            fontWeight: '700',
+                            textTransform: 'uppercase',
+                            padding: '2px 8px',
+                            borderRadius: '4px',
+                            backgroundColor: 'rgba(0, 168, 132, 0.15)',
+                            color: 'var(--wa-teal)'
+                          }}>
+                            {rule.type}
+                          </span>
+                          <strong style={{ fontSize: '14px', color: 'var(--wa-text-primary)' }}>
+                            "{rule.trigger}"
+                          </strong>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontSize: '11px', color: rule.active ? 'var(--wa-green)' : 'var(--wa-status-danger)', fontWeight: '600' }}>
+                          {rule.active ? 'Activa' : 'Pausada'}
+                        </span>
+                        <button
+                          onClick={() => handleDeleteRule(idx)}
+                          title="Eliminar regla"
+                          style={{
+                            background: 'none',
+                            color: 'var(--wa-status-danger)',
+                            padding: '4px'
+                          }}
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Editable response area */}
+                    <div>
+                      <textarea
+                        value={rule.reply}
+                        onChange={(e) => handleReplyChange(idx, e.target.value)}
+                        rows={2}
+                        style={{
+                          width: '100%',
+                          padding: '8px 12px',
+                          fontSize: '12px',
+                          backgroundColor: 'var(--wa-bg-panel)',
+                          border: '1px solid var(--wa-border-light)',
+                          borderRadius: '8px',
+                          color: 'var(--wa-text-primary)',
+                          resize: 'vertical'
+                        }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              {config ? (
-                <>
-                  <div style={{
-                    padding: '14px 16px',
-                    borderRadius: '10px',
-                    backgroundColor: 'var(--wa-bg-deep)',
-                    border: '1px solid var(--wa-border)',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '8px'
-                  }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--wa-text-primary)' }}>
-                        Estado Global del Bot
-                      </span>
-                      <span style={{
-                        fontSize: '12px',
-                        fontWeight: '700',
-                        color: config.botEnabled ? 'var(--wa-green)' : 'var(--wa-status-danger)'
-                      }}>
-                        {config.botEnabled ? 'HABILITADO' : 'PAUSADO'}
-                      </span>
-                    </div>
-                    <p style={{ fontSize: '12px', color: 'var(--wa-text-secondary)' }}>
-                      Si está pausado, el bot no contestará mensajes en ningún chat ni grupo.
-                    </p>
-                  </div>
+            /* =================== TAB 2: CONFIGURACIÓN =================== */
+            <form onSubmit={handleSaveConfig} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              
+              {/* Toggle Bot Enabled */}
+              <div style={{
+                backgroundColor: 'var(--wa-bg-deep)',
+                border: '1px solid var(--wa-border)',
+                borderRadius: '12px',
+                padding: '16px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between'
+              }}>
+                <div>
+                  <h4 style={{ fontSize: '14px', fontWeight: '700', color: 'var(--wa-text-primary)' }}>
+                    Bot Activo General
+                  </h4>
+                  <p style={{ fontSize: '12px', color: 'var(--wa-text-secondary)', marginTop: '2px' }}>
+                    Si se desactiva, el bot entra en modo mantenimiento y no responderá ningún mensaje.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setConfig({ ...config, botEnabled: !config.botEnabled })}
+                  style={{ background: 'none', color: config.botEnabled ? 'var(--wa-green)' : 'var(--wa-text-muted)' }}
+                >
+                  {config.botEnabled ? <ToggleRight size={32} /> : <ToggleLeft size={32} />}
+                </button>
+              </div>
 
-                  <div style={{
-                    padding: '14px 16px',
-                    borderRadius: '10px',
-                    backgroundColor: 'var(--wa-bg-deep)',
-                    border: '1px solid var(--wa-border)',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '8px'
-                  }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--wa-text-primary)' }}>
-                        Filtro de Menciones en Grupos
-                      </span>
-                      <span style={{
-                        fontSize: '12px',
-                        fontWeight: '700',
-                        color: config.onlyOnMention ? 'var(--wa-teal)' : 'var(--wa-text-secondary)'
-                      }}>
-                        {config.onlyOnMention ? 'SOLO CUANDO LO ARROBAN' : 'TODOS LOS MENSAJES'}
-                      </span>
-                    </div>
-                    <p style={{ fontSize: '12px', color: 'var(--wa-text-secondary)' }}>
-                      El bot solo atiende en grupos si lo mencionan explícitamente con @sistemas o @guardia.
-                    </p>
-                  </div>
+              {/* Toggle Only on Mention */}
+              <div style={{
+                backgroundColor: 'var(--wa-bg-deep)',
+                border: '1px solid var(--wa-border)',
+                borderRadius: '12px',
+                padding: '16px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between'
+              }}>
+                <div>
+                  <h4 style={{ fontSize: '14px', fontWeight: '700', color: 'var(--wa-text-primary)' }}>
+                    Responder Solo ante Mención en Grupos
+                  </h4>
+                  <p style={{ fontSize: '12px', color: 'var(--wa-text-secondary)', marginTop: '2px' }}>
+                    Solo interviene si la sucursal menciona al bot (@sistemas, @guardia o arrobando al número).
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setConfig({ ...config, onlyOnMention: !config.onlyOnMention })}
+                  style={{ background: 'none', color: config.onlyOnMention ? 'var(--wa-teal)' : 'var(--wa-text-muted)' }}
+                >
+                  {config.onlyOnMention ? <ToggleRight size={32} /> : <ToggleLeft size={32} />}
+                </button>
+              </div>
 
-                  <div style={{
-                    padding: '14px 16px',
-                    borderRadius: '10px',
-                    backgroundColor: 'var(--wa-bg-deep)',
-                    border: '1px solid var(--wa-border)',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '8px'
-                  }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--wa-text-primary)' }}>
-                        Asistente Inteligente Gemini AI
-                      </span>
-                      <span style={{
-                        fontSize: '12px',
-                        fontWeight: '700',
-                        color: config.geminiEnabled ? 'var(--wa-green)' : 'var(--wa-text-muted)'
-                      }}>
-                        {config.geminiEnabled ? 'ACTIVADO' : 'DESACTIVADO'}
-                      </span>
-                    </div>
-                    <p style={{ fontSize: '12px', color: 'var(--wa-text-secondary)' }}>
-                      Fallback de Inteligencia Artificial para consultas no contempladas en las reglas estáticas.
-                    </p>
+              {/* Gemini AI Settings */}
+              <div style={{
+                backgroundColor: 'var(--wa-bg-deep)',
+                border: '1px solid var(--wa-border)',
+                borderRadius: '12px',
+                padding: '16px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '12px'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Bot size={18} color="var(--wa-teal)" />
+                    <h4 style={{ fontSize: '14px', fontWeight: '700', color: 'var(--wa-text-primary)' }}>
+                      Asistente Inteligente Gemini AI
+                    </h4>
                   </div>
-                </>
-              ) : (
-                <p style={{ color: 'var(--wa-text-secondary)' }}>No se pudo leer la configuración.</p>
-              )}
-            </div>
+                  <button
+                    type="button"
+                    onClick={() => setConfig({ ...config, geminiEnabled: !config.geminiEnabled })}
+                    style={{ background: 'none', color: config.geminiEnabled ? 'var(--wa-green)' : 'var(--wa-text-muted)' }}
+                  >
+                    {config.geminiEnabled ? <ToggleRight size={32} /> : <ToggleLeft size={32} />}
+                  </button>
+                </div>
+
+                <p style={{ fontSize: '12px', color: 'var(--wa-text-secondary)' }}>
+                  Genera respuestas inteligentes con IA cuando el mensaje de la sucursal no coincide con ninguna regla estática.
+                </p>
+
+                {config.geminiEnabled && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '6px' }} className="animate-fade-in">
+                    <div>
+                      <label style={{ fontSize: '11px', fontWeight: '600', color: 'var(--wa-text-secondary)', display: 'block', marginBottom: '4px' }}>
+                        Gemini API Key
+                      </label>
+                      <input
+                        type="password"
+                        placeholder="AIzaSy..."
+                        value={config.geminiApiKey || ''}
+                        onChange={(e) => setConfig({ ...config, geminiApiKey: e.target.value })}
+                        style={{ width: '100%', padding: '8px 12px', fontSize: '13px' }}
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: '11px', fontWeight: '600', color: 'var(--wa-text-secondary)', display: 'block', marginBottom: '4px' }}>
+                        Prompt del Sistema (Comportamiento de la IA)
+                      </label>
+                      <textarea
+                        value={config.geminiPrompt || ''}
+                        onChange={(e) => setConfig({ ...config, geminiPrompt: e.target.value })}
+                        rows={3}
+                        style={{ width: '100%', padding: '8px 12px', fontSize: '12px', resize: 'vertical' }}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Save Config Button */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>
+                <button
+                  type="submit"
+                  disabled={savingConfig}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '10px 24px',
+                    borderRadius: '8px',
+                    backgroundColor: 'var(--wa-teal)',
+                    color: '#ffffff',
+                    fontSize: '13px',
+                    fontWeight: '700',
+                    boxShadow: '0 2px 10px rgba(0, 168, 132, 0.3)'
+                  }}
+                >
+                  <Save size={16} />
+                  <span>{savingConfig ? 'Guardando...' : 'Guardar Configuración'}</span>
+                </button>
+              </div>
+
+            </form>
           )}
         </div>
 
         {/* Modal Footer */}
         <div style={{
-          padding: '14px 24px',
+          padding: '12px 24px',
           borderTop: '1px solid var(--wa-border)',
           display: 'flex',
-          justifyContent: 'flex-end',
-          backgroundColor: 'rgba(0, 0, 0, 0.15)'
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          backgroundColor: 'rgba(0, 0, 0, 0.15)',
+          fontSize: '11px',
+          color: 'var(--wa-text-muted)'
         }}>
+          <span>Los cambios se guardan directamente en el servidor.</span>
           <button
             onClick={onClose}
             style={{
-              padding: '8px 18px',
-              borderRadius: '8px',
-              backgroundColor: 'var(--wa-teal)',
-              color: '#ffffff',
-              fontSize: '13px',
-              fontWeight: '600'
+              padding: '6px 14px',
+              borderRadius: '6px',
+              backgroundColor: 'var(--wa-bg-panel-hover)',
+              color: 'var(--wa-text-primary)',
+              fontSize: '12px'
             }}
           >
             Cerrar
@@ -307,4 +695,3 @@ export default function RulesModal({ isOpen, onClose }) {
     </div>
   );
 }
-
