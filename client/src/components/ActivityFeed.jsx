@@ -49,7 +49,8 @@ export default function ActivityFeed({ activityLog, onClearView }) {
       borderRadius: '16px',
       display: 'flex',
       flexDirection: 'column',
-      height: '700px',
+      flex: 1,
+      minHeight: '480px',
       boxShadow: '0 8px 24px rgba(0, 0, 0, 0.25)',
       overflow: 'hidden'
     }}>
@@ -90,44 +91,90 @@ export default function ActivityFeed({ activityLog, onClearView }) {
           </div>
 
           {/* Quick buttons */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <button
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            {/* Modern iOS/WhatsApp style Toggle Switch */}
+            <div 
               onClick={() => setAutoScroll(!autoScroll)}
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: '5px',
-                padding: '6px 10px',
-                borderRadius: '6px',
-                backgroundColor: autoScroll ? 'rgba(0, 168, 132, 0.15)' : 'var(--wa-bg-deep)',
-                color: autoScroll ? 'var(--wa-teal)' : 'var(--wa-text-secondary)',
-                fontSize: '11px',
-                fontWeight: '600',
-                border: '1px solid ' + (autoScroll ? 'rgba(0, 168, 132, 0.3)' : 'var(--wa-border)')
+                gap: '8px',
+                padding: '4px 10px',
+                borderRadius: '20px',
+                backgroundColor: 'var(--wa-surface-subtle)',
+                border: '1px solid var(--wa-border-subtle)',
+                cursor: 'pointer',
+                userSelect: 'none',
+                transition: 'all 0.2s'
               }}
+              title={autoScroll ? 'Pausar auto-scroll' : 'Activar auto-scroll'}
+              onMouseOver={(e) => e.currentTarget.style.backgroundColor = 'var(--wa-surface-subtle-hover)'}
+              onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'var(--wa-surface-subtle)'}
             >
-              <ArrowDown size={12} />
-              {autoScroll ? 'Auto-scroll On' : 'Pausado'}
-            </button>
+              <span style={{ 
+                fontSize: '11px', 
+                fontWeight: '600', 
+                color: autoScroll ? 'var(--wa-teal)' : 'var(--wa-text-secondary)',
+                letterSpacing: '0.02em'
+              }}>
+                Auto-scroll
+              </span>
+              
+              {/* Switch Track */}
+              <div style={{
+                width: '32px',
+                height: '18px',
+                borderRadius: '10px',
+                backgroundColor: autoScroll ? 'var(--wa-teal)' : 'rgba(255, 255, 255, 0.12)',
+                position: 'relative',
+                transition: 'background-color 0.25s ease'
+              }}>
+                {/* Switch Thumb */}
+                <div style={{
+                  width: '14px',
+                  height: '14px',
+                  borderRadius: '50%',
+                  backgroundColor: '#ffffff',
+                  position: 'absolute',
+                  top: '2px',
+                  left: '2px',
+                  transform: autoScroll ? 'translateX(14px)' : 'translateX(0px)',
+                  transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+                  boxShadow: '0 1px 3px rgba(0, 0, 0, 0.35)'
+                }} />
+              </div>
+            </div>
 
+            {/* Trash button styled in gris anegrado with hover red */}
             {onClearView && (
               <button
                 onClick={onClearView}
-                title="Limpiar vista actual"
+                title="Limpiar vista del monitor"
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  padding: '6px 10px',
-                  borderRadius: '6px',
-                  backgroundColor: 'var(--wa-bg-deep)',
-                  color: 'var(--wa-text-muted)',
-                  fontSize: '11px',
-                  border: '1px solid var(--wa-border)'
+                  justifyContent: 'center',
+                  width: '30px',
+                  height: '28px',
+                  borderRadius: '8px',
+                  backgroundColor: 'var(--wa-surface-subtle)',
+                  border: '1px solid var(--wa-border-subtle)',
+                  color: 'var(--wa-text-secondary)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
                 }}
-                onMouseOver={(e) => e.currentTarget.style.color = 'var(--wa-text-primary)'}
-                onMouseOut={(e) => e.currentTarget.style.color = 'var(--wa-text-muted)'}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.15)';
+                  e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.35)';
+                  e.currentTarget.style.color = 'var(--wa-status-danger)';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.backgroundColor = 'var(--wa-surface-subtle)';
+                  e.currentTarget.style.borderColor = 'var(--wa-border-subtle)';
+                  e.currentTarget.style.color = 'var(--wa-text-secondary)';
+                }}
               >
-                <Trash2 size={12} />
+                <Trash2 size={13} />
               </button>
             )}
           </div>

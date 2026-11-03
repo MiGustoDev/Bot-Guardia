@@ -560,6 +560,66 @@ app.post('/api/command', (req, res) => {
   }
 });
 
+app.post('/api/simulate', async (req, res) => {
+  try {
+    const { text = '', chatTitle = 'Grupo Guardia' } = req.body;
+    if (!text.trim()) {
+      return res.status(400).json({ error: 'Texto requerido' });
+    }
+
+    const branch = knowledge.detectBranch(text, chatTitle);
+    const rules = readRules();
+    let matchedRule = null;
+    const normalize = (str) => (str || '').toLowerCase().normalize('NFD').replace(/[\̀-\ͯ]/g, '').trim();
+    const cleanText = normalize(text);
+
+    for (const rule of rules) {
+      if (!rule.active) continue;
+      const cleanTrigger = normalize(rule.trigger);
+      if (rule.type === 'exact' && cleanText === cleanTrigger) {
+        matchedRule = rule;
+        break;
+      } else if (rule.type === 'contains' && cleanText.includes(cleanTrigger)) {
+        matchedRule = rule;
+        break;
+      } else if (rule.type === 'starts_with' && cleanText.startsWith(cleanTrigger)) {
+        matchedRule = rule;
+        break;
+      }
+    }
+
+    const mentionPlan = await knowledge.getGuardiaMentionResponse({ incomingText: text, chatTitle });
+    const isWorkingHours = knowledge.isWithinWorkingHours();
+    const willAlert = knowledge.shouldAlertTech();
+    const guardiaState = knowledge.getGuardiaState();
+    const activeTechName = guardiaState.assigned ? (knowledge.TECNICOS[guardiaState.assigned]?.nombre || guardiaState.assigned) : 'Ambos';
+
+    let reply = '';
+    let responseType = 'flujo_guardia';
+    if (matchedRule) {
+      reply = matchedRule.reply;
+      responseType = 'regla_contingencia';
+    } else {
+      reply = mentionPlan.messages.map(m => m.text).join('\n\n');
+      responseType = 'flujo_guardia';
+    }
+
+    res.json({
+      success: true,
+      detectedBranch: branch || 'No detectada (Preguntará sucursal)',
+      matchedRule: matchedRule ? { trigger: matchedRule.trigger, id: matchedRule.id } : null,
+      responseType,
+      reply,
+      isWorkingHours,
+      willAlert,
+      activeTech: activeTechName
+    });
+  } catch (err) {
+    console.error('Error in simulate:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/logout', async (req, res) => {
   try {
     if (client) {

@@ -63,7 +63,8 @@ export default function SidebarInfo({ activityLog }) {
     <div style={{
       display: 'flex',
       flexDirection: 'column',
-      gap: '16px'
+      gap: '16px',
+      height: '100%'
     }}>
       
       {/* Widget 1: Protocolo de Guardia (Gris anegrado con acentos sutiles) */}

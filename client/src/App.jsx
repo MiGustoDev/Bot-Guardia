@@ -8,6 +8,7 @@ import StatsStrip from './components/StatsStrip';
 import ActivityFeed from './components/ActivityFeed';
 import SidebarInfo from './components/SidebarInfo';
 import RulesModal from './components/RulesModal';
+import DetectionSimulator from './components/DetectionSimulator';
 
 // Socket URL logic:
 // If Vite dev server on 3000 or 5173, proxy to 5000 or connect directly.
@@ -172,14 +173,17 @@ function App() {
             display: 'grid',
             gridTemplateColumns: 'minmax(0, 1fr) 340px',
             gap: '24px',
-            alignItems: 'start'
+            alignItems: 'stretch'
           }}
         >
-          {/* Left Column: WhatsApp-styled Live Feed */}
-          <ActivityFeed 
-            activityLog={activityLog} 
-            onClearView={handleClearView} 
-          />
+          {/* Left Column: WhatsApp-styled Live Feed + Detection Simulator (Auto-expanded) */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', height: '100%' }}>
+            <ActivityFeed 
+              activityLog={activityLog} 
+              onClearView={handleClearView} 
+            />
+            <DetectionSimulator />
+          </div>
 
           {/* Right Column: Guard Shift, Protocols & Top Branches */}
           <SidebarInfo 
