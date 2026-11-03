@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   X, 
   Sliders, 
@@ -9,12 +9,48 @@ import {
   Trash2, 
   Save, 
   Check, 
-  ToggleLeft, 
-  ToggleRight, 
   Key, 
   Clock, 
   MessageSquare
 } from 'lucide-react';
+
+// Auto-expanding textarea that grows downward on new lines
+function AutoExpandingTextarea({ value, onChange, placeholder, style = {}, minHeight = 44, ...props }) {
+  const textareaRef = useRef(null);
+
+  const resize = () => {
+    const el = textareaRef.current;
+    if (el) {
+      el.style.height = 'auto';
+      const newHeight = Math.max(el.scrollHeight, minHeight);
+      el.style.height = `${newHeight}px`;
+    }
+  };
+
+  useEffect(() => {
+    resize();
+  }, [value]);
+
+  return (
+    <textarea
+      ref={textareaRef}
+      value={value}
+      onChange={(e) => {
+        if (onChange) onChange(e);
+        resize();
+      }}
+      placeholder={placeholder}
+      style={{
+        overflowY: 'hidden',
+        resize: 'none',
+        transition: 'height 0.12s ease',
+        boxSizing: 'border-box',
+        ...style
+      }}
+      {...props}
+    />
+  );
+}
 
 export default function RulesModal({ isOpen, onClose }) {
   const [rules, setRules] = useState([]);
@@ -56,27 +92,23 @@ export default function RulesModal({ isOpen, onClose }) {
     }
   }, [isOpen]);
 
-  // Flash success message
   const triggerSuccess = (msg) => {
     setSaveSuccessMsg(msg);
     setTimeout(() => setSaveSuccessMsg(''), 4000);
   };
 
-  // Toggle active status of a rule
   const handleToggleRule = (index) => {
     const updated = [...rules];
     updated[index].active = !updated[index].active;
     setRules(updated);
   };
 
-  // Update rule reply
   const handleReplyChange = (index, value) => {
     const updated = [...rules];
     updated[index].reply = value;
     setRules(updated);
   };
 
-  // Delete a rule
   const handleDeleteRule = (index) => {
     if (window.confirm('¿Seguro que deseas eliminar esta regla?')) {
       const updated = rules.filter((_, i) => i !== index);
@@ -84,7 +116,6 @@ export default function RulesModal({ isOpen, onClose }) {
     }
   };
 
-  // Add new rule
   const handleAddRule = (e) => {
     e.preventDefault();
     if (!newTrigger.trim() || !newReply.trim()) return;
@@ -103,7 +134,6 @@ export default function RulesModal({ isOpen, onClose }) {
     setShowAddForm(false);
   };
 
-  // Save all rules to backend
   const handleSaveRules = async () => {
     setSavingRules(true);
     try {
@@ -126,7 +156,6 @@ export default function RulesModal({ isOpen, onClose }) {
     }
   };
 
-  // Save configuration to backend
   const handleSaveConfig = async (e) => {
     if (e) e.preventDefault();
     setSavingConfig(true);
@@ -173,7 +202,7 @@ export default function RulesModal({ isOpen, onClose }) {
         border: '1px solid var(--wa-border-light)',
         borderRadius: '16px',
         width: '100%',
-        maxWidth: '780px',
+        maxWidth: '820px',
         maxHeight: '90vh',
         display: 'flex',
         flexDirection: 'column',
@@ -201,7 +230,12 @@ export default function RulesModal({ isOpen, onClose }) {
             style={{
               background: 'none',
               color: 'var(--wa-text-secondary)',
-              padding: '6px'
+              padding: '6px',
+              borderRadius: '6px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer'
             }}
             onMouseOver={(e) => e.currentTarget.style.color = 'var(--wa-text-primary)'}
             onMouseOut={(e) => e.currentTarget.style.color = 'var(--wa-text-secondary)'}
@@ -228,22 +262,33 @@ export default function RulesModal({ isOpen, onClose }) {
           </div>
         )}
 
-        {/* Tab Switch */}
+        {/* Unified Tab Switch (Gris anegrado, sin bloques negros) */}
         <div style={{
           display: 'flex',
           borderBottom: '1px solid var(--wa-border)',
-          backgroundColor: 'var(--wa-bg-deep)'
+          backgroundColor: 'var(--wa-surface-subtle)',
+          padding: '4px 16px 0 16px',
+          gap: '8px'
         }}>
           <button
             onClick={() => setActiveTab('rules')}
             style={{
-              flex: 1,
-              padding: '12px 16px',
+              padding: '12px 20px',
               fontSize: '13px',
               fontWeight: '600',
               backgroundColor: activeTab === 'rules' ? 'var(--wa-bg-panel)' : 'transparent',
               color: activeTab === 'rules' ? 'var(--wa-teal)' : 'var(--wa-text-secondary)',
-              borderBottom: activeTab === 'rules' ? '2px solid var(--wa-teal)' : '2px solid transparent'
+              border: '1px solid ' + (activeTab === 'rules' ? 'var(--wa-border)' : 'transparent'),
+              borderBottom: activeTab === 'rules' ? '2px solid var(--wa-teal)' : 'none',
+              borderRadius: '8px 8px 0 0',
+              cursor: 'pointer',
+              transition: 'all 0.2s'
+            }}
+            onMouseOver={(e) => {
+              if (activeTab !== 'rules') e.currentTarget.style.color = 'var(--wa-text-primary)';
+            }}
+            onMouseOut={(e) => {
+              if (activeTab !== 'rules') e.currentTarget.style.color = 'var(--wa-text-secondary)';
             }}
           >
             Reglas de Contingencia ({rules.length})
@@ -251,13 +296,22 @@ export default function RulesModal({ isOpen, onClose }) {
           <button
             onClick={() => setActiveTab('config')}
             style={{
-              flex: 1,
-              padding: '12px 16px',
+              padding: '12px 20px',
               fontSize: '13px',
               fontWeight: '600',
               backgroundColor: activeTab === 'config' ? 'var(--wa-bg-panel)' : 'transparent',
               color: activeTab === 'config' ? 'var(--wa-teal)' : 'var(--wa-text-secondary)',
-              borderBottom: activeTab === 'config' ? '2px solid var(--wa-teal)' : '2px solid transparent'
+              border: '1px solid ' + (activeTab === 'config' ? 'var(--wa-border)' : 'transparent'),
+              borderBottom: activeTab === 'config' ? '2px solid var(--wa-teal)' : 'none',
+              borderRadius: '8px 8px 0 0',
+              cursor: 'pointer',
+              transition: 'all 0.2s'
+            }}
+            onMouseOver={(e) => {
+              if (activeTab !== 'config') e.currentTarget.style.color = 'var(--wa-text-primary)';
+            }}
+            onMouseOut={(e) => {
+              if (activeTab !== 'config') e.currentTarget.style.color = 'var(--wa-text-secondary)';
             }}
           >
             Configuración del Bot & IA
@@ -287,28 +341,41 @@ export default function RulesModal({ isOpen, onClose }) {
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 flexWrap: 'wrap',
-                gap: '10px'
+                gap: '12px'
               }}>
                 <p style={{ fontSize: '12px', color: 'var(--wa-text-secondary)' }}>
                   Respuestas automáticas disparadas por palabras clave en los mensajes de las sucursales:
                 </p>
                 <div style={{ display: 'flex', gap: '8px' }}>
+                  {/* "+ Nueva Regla" Unified Button */}
                   <button
                     onClick={() => setShowAddForm(!showAddForm)}
                     style={{
                       display: 'flex',
                       alignItems: 'center',
                       gap: '6px',
-                      padding: '7px 14px',
+                      padding: '8px 14px',
                       borderRadius: '8px',
-                      backgroundColor: showAddForm ? 'var(--wa-bg-active)' : 'rgba(0, 168, 132, 0.15)',
-                      color: 'var(--wa-teal)',
+                      backgroundColor: showAddForm ? 'rgba(0, 168, 132, 0.15)' : 'var(--wa-surface-subtle)',
+                      color: showAddForm ? 'var(--wa-teal)' : 'var(--wa-text-primary)',
                       fontSize: '12px',
                       fontWeight: '600',
-                      border: '1px solid var(--wa-teal)'
+                      border: '1px solid ' + (showAddForm ? 'var(--wa-teal)' : 'var(--wa-border-subtle)'),
+                      cursor: 'pointer',
+                      transition: 'all 0.2s'
+                    }}
+                    onMouseOver={(e) => {
+                      e.currentTarget.style.backgroundColor = 'var(--wa-surface-subtle-hover)';
+                      e.currentTarget.style.borderColor = 'var(--wa-teal)';
+                    }}
+                    onMouseOut={(e) => {
+                      if (!showAddForm) {
+                        e.currentTarget.style.backgroundColor = 'var(--wa-surface-subtle)';
+                        e.currentTarget.style.borderColor = 'var(--wa-border-subtle)';
+                      }
                     }}
                   >
-                    <Plus size={14} />
+                    <Plus size={14} color="var(--wa-teal)" />
                     <span>{showAddForm ? 'Cancelar' : 'Nueva Regla'}</span>
                   </button>
 
@@ -319,14 +386,17 @@ export default function RulesModal({ isOpen, onClose }) {
                       display: 'flex',
                       alignItems: 'center',
                       gap: '6px',
-                      padding: '7px 16px',
+                      padding: '8px 16px',
                       borderRadius: '8px',
                       backgroundColor: 'var(--wa-teal)',
                       color: '#ffffff',
                       fontSize: '12px',
                       fontWeight: '700',
-                      boxShadow: '0 2px 8px rgba(0, 168, 132, 0.3)'
+                      boxShadow: '0 2px 8px rgba(0, 168, 132, 0.3)',
+                      cursor: 'pointer'
                     }}
+                    onMouseOver={(e) => e.currentTarget.style.backgroundColor = 'var(--wa-teal-hover)'}
+                    onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'var(--wa-teal)'}
                   >
                     <Save size={14} />
                     <span>{savingRules ? 'Guardando...' : 'Guardar Cambios'}</span>
@@ -334,12 +404,12 @@ export default function RulesModal({ isOpen, onClose }) {
                 </div>
               </div>
 
-              {/* Add Rule Inline Form */}
+              {/* Add Rule Inline Form (Gris anegrado unificado) */}
               {showAddForm && (
                 <form
                   onSubmit={handleAddRule}
                   style={{
-                    backgroundColor: 'var(--wa-bg-deep)',
+                    backgroundColor: 'var(--wa-surface-subtle)',
                     border: '1px solid var(--wa-teal)',
                     borderRadius: '12px',
                     padding: '16px',
@@ -364,7 +434,14 @@ export default function RulesModal({ isOpen, onClose }) {
                         value={newTrigger}
                         onChange={(e) => setNewTrigger(e.target.value)}
                         required
-                        style={{ width: '100%', padding: '8px 12px', fontSize: '13px' }}
+                        style={{
+                          width: '100%',
+                          padding: '8px 12px',
+                          fontSize: '13px',
+                          backgroundColor: '#162026',
+                          border: '1px solid var(--wa-border-subtle)',
+                          borderRadius: '8px'
+                        }}
                       />
                     </div>
 
@@ -375,7 +452,14 @@ export default function RulesModal({ isOpen, onClose }) {
                       <select
                         value={newType}
                         onChange={(e) => setNewType(e.target.value)}
-                        style={{ width: '100%', padding: '8px 12px', fontSize: '13px' }}
+                        style={{
+                          width: '100%',
+                          padding: '8px 12px',
+                          fontSize: '13px',
+                          backgroundColor: '#162026',
+                          border: '1px solid var(--wa-border-subtle)',
+                          borderRadius: '8px'
+                        }}
                       >
                         <option value="contains">Contiene la palabra</option>
                         <option value="exact">Mensaje exacto</option>
@@ -388,13 +472,20 @@ export default function RulesModal({ isOpen, onClose }) {
                     <label style={{ fontSize: '11px', fontWeight: '600', color: 'var(--wa-text-secondary)', display: 'block', marginBottom: '4px' }}>
                       Respuesta del Bot
                     </label>
-                    <textarea
+                    <AutoExpandingTextarea
                       placeholder="Escribe la respuesta automática técnica que enviará el bot..."
                       value={newReply}
                       onChange={(e) => setNewReply(e.target.value)}
                       required
-                      rows={3}
-                      style={{ width: '100%', padding: '8px 12px', fontSize: '13px', resize: 'vertical' }}
+                      minHeight={64}
+                      style={{
+                        width: '100%',
+                        padding: '10px 12px',
+                        fontSize: '13px',
+                        backgroundColor: '#162026',
+                        border: '1px solid var(--wa-border-subtle)',
+                        borderRadius: '8px'
+                      }}
                     />
                   </div>
 
@@ -403,11 +494,12 @@ export default function RulesModal({ isOpen, onClose }) {
                       type="button"
                       onClick={() => setShowAddForm(false)}
                       style={{
-                        padding: '6px 12px',
+                        padding: '6px 14px',
                         borderRadius: '6px',
                         backgroundColor: 'transparent',
                         color: 'var(--wa-text-secondary)',
-                        fontSize: '12px'
+                        fontSize: '12px',
+                        cursor: 'pointer'
                       }}
                     >
                       Cancelar
@@ -420,7 +512,8 @@ export default function RulesModal({ isOpen, onClose }) {
                         backgroundColor: 'var(--wa-teal)',
                         color: '#ffffff',
                         fontSize: '12px',
-                        fontWeight: '700'
+                        fontWeight: '700',
+                        cursor: 'pointer'
                       }}
                     >
                       Añadir Regla a la Lista
@@ -429,36 +522,55 @@ export default function RulesModal({ isOpen, onClose }) {
                 </form>
               )}
 
-              {/* Rules List */}
+              {/* Rules List (Rediseño Gris Anegrado con acento verde y switches modernos) */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 {rules.map((rule, idx) => (
                   <div
                     key={rule.id || idx}
                     style={{
-                      backgroundColor: 'var(--wa-bg-deep)',
-                      border: '1px solid ' + (rule.active ? 'var(--wa-border)' : 'rgba(239, 68, 68, 0.2)'),
+                      backgroundColor: 'var(--wa-surface-subtle)',
+                      border: '1px solid var(--wa-border-subtle)',
+                      borderLeft: '3px solid ' + (rule.active ? 'var(--wa-teal)' : 'var(--wa-status-danger)'),
                       borderRadius: '12px',
                       padding: '14px 16px',
                       display: 'flex',
                       flexDirection: 'column',
                       gap: '10px',
-                      opacity: rule.active ? 1 : 0.65
+                      opacity: rule.active ? 1 : 0.65,
+                      boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
+                      transition: 'all 0.2s'
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <button
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        
+                        {/* Animated Mini Toggle Switch */}
+                        <div
                           onClick={() => handleToggleRule(idx)}
-                          title={rule.active ? 'Desactivar regla' : 'Activar regla'}
                           style={{
-                            background: 'none',
-                            color: rule.active ? 'var(--wa-green)' : 'var(--wa-text-muted)',
-                            display: 'flex',
-                            alignItems: 'center'
+                            width: '32px',
+                            height: '18px',
+                            borderRadius: '10px',
+                            backgroundColor: rule.active ? 'var(--wa-teal)' : 'rgba(255, 255, 255, 0.12)',
+                            position: 'relative',
+                            cursor: 'pointer',
+                            transition: 'background-color 0.25s ease'
                           }}
+                          title={rule.active ? 'Desactivar regla' : 'Activar regla'}
                         >
-                          {rule.active ? <ToggleRight size={26} /> : <ToggleLeft size={26} />}
-                        </button>
+                          <div style={{
+                            width: '14px',
+                            height: '14px',
+                            borderRadius: '50%',
+                            backgroundColor: '#ffffff',
+                            position: 'absolute',
+                            top: '2px',
+                            left: '2px',
+                            transform: rule.active ? 'translateX(14px)' : 'translateX(0px)',
+                            transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+                            boxShadow: '0 1px 3px rgba(0, 0, 0, 0.35)'
+                          }} />
+                        </div>
 
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                           <span style={{
@@ -466,9 +578,10 @@ export default function RulesModal({ isOpen, onClose }) {
                             fontWeight: '700',
                             textTransform: 'uppercase',
                             padding: '2px 8px',
-                            borderRadius: '4px',
-                            backgroundColor: 'rgba(0, 168, 132, 0.15)',
-                            color: 'var(--wa-teal)'
+                            borderRadius: '6px',
+                            backgroundColor: 'rgba(0, 168, 132, 0.12)',
+                            color: 'var(--wa-teal)',
+                            border: '1px solid rgba(0, 168, 132, 0.25)'
                           }}>
                             {rule.type}
                           </span>
@@ -478,39 +591,64 @@ export default function RulesModal({ isOpen, onClose }) {
                         </div>
                       </div>
 
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ fontSize: '11px', color: rule.active ? 'var(--wa-green)' : 'var(--wa-status-danger)', fontWeight: '600' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <span style={{
+                          fontSize: '11px',
+                          color: rule.active ? 'var(--wa-green)' : 'var(--wa-status-danger)',
+                          fontWeight: '600'
+                        }}>
                           {rule.active ? 'Activa' : 'Pausada'}
                         </span>
+                        
+                        {/* Delete button styled in unified gris anegrado */}
                         <button
                           onClick={() => handleDeleteRule(idx)}
                           title="Eliminar regla"
                           style={{
-                            background: 'none',
-                            color: 'var(--wa-status-danger)',
-                            padding: '4px'
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            width: '28px',
+                            height: '28px',
+                            borderRadius: '6px',
+                            backgroundColor: '#162026',
+                            border: '1px solid var(--wa-border-subtle)',
+                            color: 'var(--wa-text-secondary)',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s'
+                          }}
+                          onMouseOver={(e) => {
+                            e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.15)';
+                            e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.35)';
+                            e.currentTarget.style.color = 'var(--wa-status-danger)';
+                          }}
+                          onMouseOut={(e) => {
+                            e.currentTarget.style.backgroundColor = '#162026';
+                            e.currentTarget.style.borderColor = 'var(--wa-border-subtle)';
+                            e.currentTarget.style.color = 'var(--wa-text-secondary)';
                           }}
                         >
-                          <Trash2 size={15} />
+                          <Trash2 size={13} />
                         </button>
                       </div>
                     </div>
 
-                    {/* Editable response area */}
+                    {/* Editable response area styled in unified elevated dark surface with auto-expand */}
                     <div>
-                      <textarea
+                      <AutoExpandingTextarea
                         value={rule.reply}
                         onChange={(e) => handleReplyChange(idx, e.target.value)}
-                        rows={2}
+                        placeholder="Escribe la respuesta del bot..."
+                        minHeight={42}
                         style={{
                           width: '100%',
-                          padding: '8px 12px',
+                          padding: '10px 12px',
                           fontSize: '12px',
-                          backgroundColor: 'var(--wa-bg-panel)',
-                          border: '1px solid var(--wa-border-light)',
+                          backgroundColor: '#162026',
+                          border: '1px solid var(--wa-border-subtle)',
                           borderRadius: '8px',
                           color: 'var(--wa-text-primary)',
-                          resize: 'vertical'
+                          lineHeight: '1.4'
                         }}
                       />
                     </div>
@@ -525,8 +663,9 @@ export default function RulesModal({ isOpen, onClose }) {
               
               {/* Toggle Bot Enabled */}
               <div style={{
-                backgroundColor: 'var(--wa-bg-deep)',
-                border: '1px solid var(--wa-border)',
+                backgroundColor: 'var(--wa-surface-subtle)',
+                border: '1px solid var(--wa-border-subtle)',
+                borderLeft: '3px solid ' + (config.botEnabled ? 'var(--wa-teal)' : 'var(--wa-status-danger)'),
                 borderRadius: '12px',
                 padding: '16px',
                 display: 'flex',
@@ -541,19 +680,40 @@ export default function RulesModal({ isOpen, onClose }) {
                     Si se desactiva, el bot entra en modo mantenimiento y no responderá ningún mensaje.
                   </p>
                 </div>
-                <button
-                  type="button"
+                
+                {/* Modern Switch */}
+                <div
                   onClick={() => setConfig({ ...config, botEnabled: !config.botEnabled })}
-                  style={{ background: 'none', color: config.botEnabled ? 'var(--wa-green)' : 'var(--wa-text-muted)' }}
+                  style={{
+                    width: '36px',
+                    height: '20px',
+                    borderRadius: '12px',
+                    backgroundColor: config.botEnabled ? 'var(--wa-teal)' : 'rgba(255, 255, 255, 0.12)',
+                    position: 'relative',
+                    cursor: 'pointer',
+                    transition: 'background-color 0.25s ease'
+                  }}
                 >
-                  {config.botEnabled ? <ToggleRight size={32} /> : <ToggleLeft size={32} />}
-                </button>
+                  <div style={{
+                    width: '16px',
+                    height: '16px',
+                    borderRadius: '50%',
+                    backgroundColor: '#ffffff',
+                    position: 'absolute',
+                    top: '2px',
+                    left: '2px',
+                    transform: config.botEnabled ? 'translateX(16px)' : 'translateX(0px)',
+                    transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+                    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.35)'
+                  }} />
+                </div>
               </div>
 
               {/* Toggle Only on Mention */}
               <div style={{
-                backgroundColor: 'var(--wa-bg-deep)',
-                border: '1px solid var(--wa-border)',
+                backgroundColor: 'var(--wa-surface-subtle)',
+                border: '1px solid var(--wa-border-subtle)',
+                borderLeft: '3px solid ' + (config.onlyOnMention ? 'var(--wa-teal)' : 'var(--wa-text-link)'),
                 borderRadius: '12px',
                 padding: '16px',
                 display: 'flex',
@@ -568,19 +728,40 @@ export default function RulesModal({ isOpen, onClose }) {
                     Solo interviene si la sucursal menciona al bot (@sistemas, @guardia o arrobando al número).
                   </p>
                 </div>
-                <button
-                  type="button"
+
+                {/* Modern Switch */}
+                <div
                   onClick={() => setConfig({ ...config, onlyOnMention: !config.onlyOnMention })}
-                  style={{ background: 'none', color: config.onlyOnMention ? 'var(--wa-teal)' : 'var(--wa-text-muted)' }}
+                  style={{
+                    width: '36px',
+                    height: '20px',
+                    borderRadius: '12px',
+                    backgroundColor: config.onlyOnMention ? 'var(--wa-teal)' : 'rgba(255, 255, 255, 0.12)',
+                    position: 'relative',
+                    cursor: 'pointer',
+                    transition: 'background-color 0.25s ease'
+                  }}
                 >
-                  {config.onlyOnMention ? <ToggleRight size={32} /> : <ToggleLeft size={32} />}
-                </button>
+                  <div style={{
+                    width: '16px',
+                    height: '16px',
+                    borderRadius: '50%',
+                    backgroundColor: '#ffffff',
+                    position: 'absolute',
+                    top: '2px',
+                    left: '2px',
+                    transform: config.onlyOnMention ? 'translateX(16px)' : 'translateX(0px)',
+                    transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+                    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.35)'
+                  }} />
+                </div>
               </div>
 
               {/* Gemini AI Settings */}
               <div style={{
-                backgroundColor: 'var(--wa-bg-deep)',
-                border: '1px solid var(--wa-border)',
+                backgroundColor: 'var(--wa-surface-subtle)',
+                border: '1px solid var(--wa-border-subtle)',
+                borderLeft: '3px solid ' + (config.geminiEnabled ? 'var(--wa-teal)' : 'var(--wa-text-muted)'),
                 borderRadius: '12px',
                 padding: '16px',
                 display: 'flex',
@@ -594,13 +775,33 @@ export default function RulesModal({ isOpen, onClose }) {
                       Asistente Inteligente Gemini AI
                     </h4>
                   </div>
-                  <button
-                    type="button"
+
+                  {/* Modern Switch */}
+                  <div
                     onClick={() => setConfig({ ...config, geminiEnabled: !config.geminiEnabled })}
-                    style={{ background: 'none', color: config.geminiEnabled ? 'var(--wa-green)' : 'var(--wa-text-muted)' }}
+                    style={{
+                      width: '36px',
+                      height: '20px',
+                      borderRadius: '12px',
+                      backgroundColor: config.geminiEnabled ? 'var(--wa-teal)' : 'rgba(255, 255, 255, 0.12)',
+                      position: 'relative',
+                      cursor: 'pointer',
+                      transition: 'background-color 0.25s ease'
+                    }}
                   >
-                    {config.geminiEnabled ? <ToggleRight size={32} /> : <ToggleLeft size={32} />}
-                  </button>
+                    <div style={{
+                      width: '16px',
+                      height: '16px',
+                      borderRadius: '50%',
+                      backgroundColor: '#ffffff',
+                      position: 'absolute',
+                      top: '2px',
+                      left: '2px',
+                      transform: config.geminiEnabled ? 'translateX(16px)' : 'translateX(0px)',
+                      transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+                      boxShadow: '0 1px 3px rgba(0, 0, 0, 0.35)'
+                    }} />
+                  </div>
                 </div>
 
                 <p style={{ fontSize: '12px', color: 'var(--wa-text-secondary)' }}>
@@ -618,7 +819,14 @@ export default function RulesModal({ isOpen, onClose }) {
                         placeholder="AIzaSy..."
                         value={config.geminiApiKey || ''}
                         onChange={(e) => setConfig({ ...config, geminiApiKey: e.target.value })}
-                        style={{ width: '100%', padding: '8px 12px', fontSize: '13px' }}
+                        style={{
+                          width: '100%',
+                          padding: '8px 12px',
+                          fontSize: '13px',
+                          backgroundColor: '#162026',
+                          border: '1px solid var(--wa-border-subtle)',
+                          borderRadius: '8px'
+                        }}
                       />
                     </div>
 
@@ -626,11 +834,19 @@ export default function RulesModal({ isOpen, onClose }) {
                       <label style={{ fontSize: '11px', fontWeight: '600', color: 'var(--wa-text-secondary)', display: 'block', marginBottom: '4px' }}>
                         Prompt del Sistema (Comportamiento de la IA)
                       </label>
-                      <textarea
+                      <AutoExpandingTextarea
                         value={config.geminiPrompt || ''}
                         onChange={(e) => setConfig({ ...config, geminiPrompt: e.target.value })}
-                        rows={3}
-                        style={{ width: '100%', padding: '8px 12px', fontSize: '12px', resize: 'vertical' }}
+                        minHeight={64}
+                        placeholder="Escribe el prompt de comportamiento del bot..."
+                        style={{
+                          width: '100%',
+                          padding: '10px 12px',
+                          fontSize: '12px',
+                          backgroundColor: '#162026',
+                          border: '1px solid var(--wa-border-subtle)',
+                          borderRadius: '8px'
+                        }}
                       />
                     </div>
                   </div>
@@ -652,8 +868,11 @@ export default function RulesModal({ isOpen, onClose }) {
                     color: '#ffffff',
                     fontSize: '13px',
                     fontWeight: '700',
-                    boxShadow: '0 2px 10px rgba(0, 168, 132, 0.3)'
+                    boxShadow: '0 2px 10px rgba(0, 168, 132, 0.3)',
+                    cursor: 'pointer'
                   }}
+                  onMouseOver={(e) => e.currentTarget.style.backgroundColor = 'var(--wa-teal-hover)'}
+                  onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'var(--wa-teal)'}
                 >
                   <Save size={16} />
                   <span>{savingConfig ? 'Guardando...' : 'Guardar Configuración'}</span>
@@ -681,10 +900,15 @@ export default function RulesModal({ isOpen, onClose }) {
             style={{
               padding: '6px 14px',
               borderRadius: '6px',
-              backgroundColor: 'var(--wa-bg-panel-hover)',
+              backgroundColor: 'var(--wa-surface-subtle)',
+              border: '1px solid var(--wa-border-subtle)',
               color: 'var(--wa-text-primary)',
-              fontSize: '12px'
+              fontSize: '12px',
+              cursor: 'pointer',
+              transition: 'all 0.2s'
             }}
+            onMouseOver={(e) => e.currentTarget.style.backgroundColor = 'var(--wa-surface-subtle-hover)'}
+            onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'var(--wa-surface-subtle)'}
           >
             Cerrar
           </button>
