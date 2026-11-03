@@ -35,28 +35,7 @@ export default function Navbar({
           </div>
         );
       case 'QR_READY':
-        return (
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            backgroundColor: 'rgba(245, 158, 11, 0.12)',
-            color: 'var(--wa-status-warning)',
-            padding: '6px 14px',
-            borderRadius: '20px',
-            fontSize: '13px',
-            fontWeight: '600',
-            border: '1px solid rgba(245, 158, 11, 0.25)'
-          }}>
-            <span style={{
-              width: '8px',
-              height: '8px',
-              borderRadius: '50%',
-              backgroundColor: 'var(--wa-status-warning)'
-            }} className="animate-pulse-amber" />
-            Esperando Escaneo QR
-          </div>
-        );
+        return null;
       case 'CONNECTING':
         return (
           <div style={{
@@ -129,9 +108,19 @@ export default function Navbar({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            boxShadow: '0 4px 12px rgba(0, 168, 132, 0.3)'
+            boxShadow: '0 4px 12px rgba(0, 168, 132, 0.35)',
+            padding: '6px',
+            flexShrink: 0
           }}>
-            <MessageSquare color="#ffffff" size={24} />
+            <img 
+              src="/logo.png" 
+              alt="Logo Mi Gusto" 
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'contain'
+              }}
+            />
           </div>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
