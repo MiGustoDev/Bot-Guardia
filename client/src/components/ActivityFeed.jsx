@@ -160,7 +160,10 @@ export default function ActivityFeed({ activityLog, onClearView }) {
                 width: '100%',
                 padding: '8px 12px 8px 34px',
                 fontSize: '13px',
-                borderRadius: '8px'
+                borderRadius: '8px',
+                backgroundColor: 'var(--wa-surface-subtle)',
+                border: '1px solid var(--wa-border-subtle)',
+                color: 'var(--wa-text-primary)'
               }}
             />
             {searchTerm && (
@@ -186,13 +189,26 @@ export default function ActivityFeed({ activityLog, onClearView }) {
             <button
               onClick={() => setFilterType('all')}
               style={{
-                padding: '6px 12px',
+                padding: '6px 14px',
                 borderRadius: '6px',
                 fontSize: '12px',
-                fontWeight: '500',
-                backgroundColor: filterType === 'all' ? 'var(--wa-teal)' : 'var(--wa-bg-deep)',
+                fontWeight: '600',
+                backgroundColor: filterType === 'all' ? 'var(--wa-teal)' : 'var(--wa-surface-subtle)',
                 color: filterType === 'all' ? '#ffffff' : 'var(--wa-text-secondary)',
-                border: '1px solid ' + (filterType === 'all' ? 'var(--wa-teal)' : 'var(--wa-border)')
+                border: '1px solid ' + (filterType === 'all' ? 'var(--wa-teal)' : 'var(--wa-border-subtle)'),
+                transition: 'all 0.2s'
+              }}
+              onMouseOver={(e) => {
+                if (filterType !== 'all') {
+                  e.currentTarget.style.backgroundColor = 'var(--wa-surface-subtle-hover)';
+                  e.currentTarget.style.color = 'var(--wa-text-primary)';
+                }
+              }}
+              onMouseOut={(e) => {
+                if (filterType !== 'all') {
+                  e.currentTarget.style.backgroundColor = 'var(--wa-surface-subtle)';
+                  e.currentTarget.style.color = 'var(--wa-text-secondary)';
+                }
               }}
             >
               Todos
@@ -200,13 +216,26 @@ export default function ActivityFeed({ activityLog, onClearView }) {
             <button
               onClick={() => setFilterType('incoming')}
               style={{
-                padding: '6px 12px',
+                padding: '6px 14px',
                 borderRadius: '6px',
                 fontSize: '12px',
-                fontWeight: '500',
-                backgroundColor: filterType === 'incoming' ? 'var(--wa-teal)' : 'var(--wa-bg-deep)',
+                fontWeight: '600',
+                backgroundColor: filterType === 'incoming' ? 'var(--wa-teal)' : 'var(--wa-surface-subtle)',
                 color: filterType === 'incoming' ? '#ffffff' : 'var(--wa-text-secondary)',
-                border: '1px solid ' + (filterType === 'incoming' ? 'var(--wa-teal)' : 'var(--wa-border)')
+                border: '1px solid ' + (filterType === 'incoming' ? 'var(--wa-teal)' : 'var(--wa-border-subtle)'),
+                transition: 'all 0.2s'
+              }}
+              onMouseOver={(e) => {
+                if (filterType !== 'incoming') {
+                  e.currentTarget.style.backgroundColor = 'var(--wa-surface-subtle-hover)';
+                  e.currentTarget.style.color = 'var(--wa-text-primary)';
+                }
+              }}
+              onMouseOut={(e) => {
+                if (filterType !== 'incoming') {
+                  e.currentTarget.style.backgroundColor = 'var(--wa-surface-subtle)';
+                  e.currentTarget.style.color = 'var(--wa-text-secondary)';
+                }
               }}
             >
               Sucursales
@@ -214,13 +243,26 @@ export default function ActivityFeed({ activityLog, onClearView }) {
             <button
               onClick={() => setFilterType('system')}
               style={{
-                padding: '6px 12px',
+                padding: '6px 14px',
                 borderRadius: '6px',
                 fontSize: '12px',
-                fontWeight: '500',
-                backgroundColor: filterType === 'system' ? 'var(--wa-teal)' : 'var(--wa-bg-deep)',
+                fontWeight: '600',
+                backgroundColor: filterType === 'system' ? 'var(--wa-teal)' : 'var(--wa-surface-subtle)',
                 color: filterType === 'system' ? '#ffffff' : 'var(--wa-text-secondary)',
-                border: '1px solid ' + (filterType === 'system' ? 'var(--wa-teal)' : 'var(--wa-border)')
+                border: '1px solid ' + (filterType === 'system' ? 'var(--wa-teal)' : 'var(--wa-border-subtle)'),
+                transition: 'all 0.2s'
+              }}
+              onMouseOver={(e) => {
+                if (filterType !== 'system') {
+                  e.currentTarget.style.backgroundColor = 'var(--wa-surface-subtle-hover)';
+                  e.currentTarget.style.color = 'var(--wa-text-primary)';
+                }
+              }}
+              onMouseOut={(e) => {
+                if (filterType !== 'system') {
+                  e.currentTarget.style.backgroundColor = 'var(--wa-surface-subtle)';
+                  e.currentTarget.style.color = 'var(--wa-text-secondary)';
+                }
               }}
             >
               Sistema

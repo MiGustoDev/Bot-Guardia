@@ -545,6 +545,21 @@ app.get('/api/activity', (req, res) => {
   res.json(activityLog);
 });
 
+app.post('/api/command', (req, res) => {
+  try {
+    const { command } = req.body;
+    if (!command) return res.status(400).json({ error: 'Comando requerido' });
+    const reply = knowledge.processTechCommand(command, 'Dashboard', botStartTime);
+    if (reply) {
+      logActivity('system', 'Comando Dashboard', command, reply);
+    }
+    res.json({ success: true, command, reply: reply || 'Comando ejecutado correctamente.' });
+  } catch (err) {
+    console.error('Error executing tech command:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/logout', async (req, res) => {
   try {
     if (client) {
