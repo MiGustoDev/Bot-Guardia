@@ -305,7 +305,14 @@ function initWhatsApp() {
 
       // Si fue mencionado en grupo o modo onlyOnMention activo
       if (isMentioned || (config.onlyOnMention && isGroup)) {
-        const responsePlan = await knowledge.getGuardiaMentionResponse({ incomingText, chatTitle });
+        const geminiApiKey = config.geminiApiKey || process.env.GEMINI_API_KEY || '';
+        const geminiPrompt = config.geminiPrompt || '';
+        const responsePlan = await knowledge.getGuardiaMentionResponse({ 
+          incomingText, 
+          chatTitle,
+          customPrompt: geminiPrompt,
+          customApiKey: geminiApiKey
+        });
         const chatId = msg.from;
         const senderId = msg.author || msg.from; // ID de quien arrobó en el grupo
 

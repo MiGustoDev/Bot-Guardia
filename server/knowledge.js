@@ -566,36 +566,55 @@ function getRandomAcknowledgement() {
  * humana y adaptada al mensaje. Si no hay key o falla, usa el fallback estático.
  */
 const GEMINI_SYSTEM_INSTRUCTION = `
-Sos parte del equipo de soporte técnico de Sistemas (Facu y Ramiro) que atiende sucursales y franquicias en Argentina.
-- Tu rol es confirmar de forma humana y breve que recibiste el aviso y que lo estás revisando.
-- Hablá como un técnico de guardia real respondiendo por WhatsApp desde el celular.
-- NUNCA uses signos de apertura (¡ o ¿).
-- NUNCA uses saludos corporativos ("Estimado", "Cordial saludo", "Estoy para ayudarte").
-- Respuestas de UNA SOLA ORACIÓN, cortas, directas y tranquilizadoras.
-- Ejemplos de estilo: "Ahi lo miramos con los chicos, dame unos minutos", "Recibido, ya me pongo a revisar qué pasó con eso", "Tranqui, ahora le pego un ojo al sistema", "Anotado, ya lo estamos chequeando".
+Sos Facu o Ramiro del equipo de soporte de Sistemas de Mi Gusto en Argentina, respondiendo por WhatsApp desde el teléfono de guardia.
+Las sucursales y franquicias CREEN QUE ESTÁN HABLANDO CON UNA PERSONA REAL. BAJO NINGÚN CONCEPTO DEBEN NOTAR QUE SOS UN BOT O UNA INTELIGENCIA ARTIFICIAL.
+
+REGLAS DE IDENTIDAD Y CAMUFLAJE HUMANO (MÁXIMA PRIORIDAD):
+1. NUNCA digas "soy un bot", "como modelo de lenguaje", "asistente virtual", "IA", "sistema automatizado" ni nada parecido.
+2. NUNCA uses saludos corporativos ni acartonados ("Estimado", "Cordial saludo", "En qué puedo colaborarle", "Un placer ayudarle").
+3. NUNCA uses signos de apertura (prohibido usar '¡' o '¿'). Escribí como se tipea rápido en WhatsApp: "buenas, como va?", "de que sucursal nos escriben?".
+4. Hablá siempre en criollo argentino de soporte técnico: "bancanos un toque", "ahi lo miramos con los chicos", "pasame foto de la pantalla", "fijate si apagando y prendiendo levanta", "de que local son?".
+5. Respuestas CORTAS: de 1 o 2 oraciones concisas. Los técnicos por WhatsApp nunca mandan párrafos gigantes ni listas con viñetas complejas.
+
+REGLA CLAVE DE PROVEEDOR:
+- Nuestro proveedor al que le escalamos los problemas del sistema/software es "Datalive" (NUNCA menciones a Maxirest). Si hay que escalarlo, decí: "ahi lo revisamos con los chicos y si sigue lo pasamos a Datalive".
+
+COMPORTAMIENTO RESOLUTIVO:
+- Si no dijeron de qué sucursal escriben, preguntá el local: "de que sucursal nos escriben asi revisamos?".
+- Si reportan un error o falla de comanda/impresora/sistema, pedí una foto: "mandanos foto del error que te tira en pantalla".
+- Si es algo evidente, tirá un tip rápido antes de revisar: "probá reiniciar la terminal / comandera a ver si engancha mientras chequeamos".
 `;
 
-async function getGeminiAcknowledgement(incomingText = '', branchName = '') {
-  const apiKey = process.env.GEMINI_API_KEY;
+async function getGeminiAcknowledgement(incomingText = '', branchName = '', customPrompt = '', customApiKey = '') {
+  const apiKey = customApiKey || process.env.GEMINI_API_KEY;
   if (!apiKey) return null;
 
   try {
     const { GoogleGenAI } = require('@google/generative-ai');
     const ai = new GoogleGenAI({ apiKey });
+    const systemInstruction = customPrompt && customPrompt.trim().length > 20 
+      ? `${customPrompt}\n\nIMPORTANTE: NUNCA uses signos de apertura (¡ o ¿). Sé conciso (1-2 oraciones cortas).`
+      : GEMINI_SYSTEM_INSTRUCTION;
+
     const model = ai.getGenerativeModel({
       model: 'gemini-1.5-flash',
-      systemInstruction: GEMINI_SYSTEM_INSTRUCTION
+      systemInstruction
     });
 
-    const prompt = `Sucursal: ${branchName || 'Local'}\nMensaje reportado: "${incomingText}"\nResponde solo con la confirmación de revisión en una línea:`;
+    const promptContext = branchName && branchName !== 'No especificada'
+      ? `Sucursal identificada: ${branchName}`
+      : `Sucursal: NO identificada (el usuario aún no dijo de qué local escribe)`;
+
+    const prompt = `${promptContext}\nMensaje de la sucursal: "${incomingText}"\nGenera una respuesta resolutiva y natural en 1 o 2 oraciones:`;
     
-    // Timeout de seguridad de 3 segundos para que el bot nunca quede colgado
-    const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Gemini timeout')), 3000));
+    // Timeout de seguridad de 4 segundos para que el bot nunca quede colgado
+    const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Gemini timeout')), 4000));
     const result = await Promise.race([model.generateContent(prompt), timeoutPromise]);
     
     let text = result.response.text().trim();
-    // Limpieza de comillas o signos de apertura
+    // Limpieza de comillas, saltos de línea sobrantes o signos de apertura accidentales
     text = text.replace(/^[¡¿"\s]+|[!"\s]+$/g, '').trim();
+    text = text.replace(/¡/g, '').replace(/¿/g, '');
     if (text) return text;
   } catch (err) {
     console.warn('[Gemini AI Warning] No se pudo obtener respuesta de Gemini, usando fallback humano:', err.message);
@@ -612,27 +631,27 @@ async function getGeminiAcknowledgement(incomingText = '', branchName = '') {
  * - Mensaje 2: Confirmación de revisión (vía Gemini si está disponible en .env, sino fallback humano)
  */
 async function getGuardiaMentionResponse(context = {}) {
-  const { incomingText = '', chatTitle = '' } = context;
+  const { incomingText = '', chatTitle = '', customPrompt = '', customApiKey = '' } = context;
 
   const detectedBranch = detectBranch(incomingText, chatTitle);
 
   const msg1Text = getRandomGreeting();
-  // Intenta consultar a Gemini si está configurado en .env; si no, usa el acuse estándar
-  const geminiText = await getGeminiAcknowledgement(incomingText, detectedBranch);
+  // Intenta consultar a Gemini con el prompt resolutivo; si no, usa el acuse estándar de fallback
+  const geminiText = await getGeminiAcknowledgement(incomingText, detectedBranch, customPrompt, customApiKey);
   const msg2Text = geminiText || getRandomAcknowledgement();
 
-  // El bot solo responde los 2 mensajes humanos: Saludo + Confirmación
+  // El bot responde los 2 mensajes humanos: Saludo + Respuesta resolutiva / confirmación
   const messages = [
     {
       text: msg1Text,
       isReply: true, // Cita el mensaje original
-      delayBefore: 2500, // Pausa de lectura inicial
-      typingDuration: 3000
+      delayBefore: 2000, // Pausa de lectura inicial
+      typingDuration: 2500
     },
     {
       text: msg2Text,
       isReply: false, // Mensaje separado en el chat
-      delayBefore: 2000, // Pausa entre mensajes
+      delayBefore: 1800, // Pausa entre mensajes
       typingDuration: 3500
     }
   ];

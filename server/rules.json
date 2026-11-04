@@ -1,8 +1,8 @@
 [
   {
     "id": "1",
-    "trigger": "maxirest",
-    "reply": "Recibido. ¿La falla de Maxirest es en un punto de venta específico o en la base/servidor del local? Pasame el nro de sucursal.",
+    "trigger": "datalive",
+    "reply": "Recibido. Pasame el numero de sucursal y una foto del error en pantalla asi lo revisamos o lo escalamos directo con la gente de Datalive.",
     "type": "contains",
     "active": true
   },
