@@ -1,11 +1,25 @@
 
+function capitalizeFirstLetter(str = '') {
+  if (!str) return '';
+  return str.replace(/^([^a-zA-ZáéíóúÁÉÍÓÚñÑüÜ]*)([a-zA-ZáéíóúÁÉÍÓÚñÑüÜ])/, (_, prefix, firstChar) => {
+    return prefix + firstChar.toUpperCase();
+  });
+}
+
 function cleanHumanText(text = '') {
   if (!text) return '';
   let res = text.trim();
   res = res.replace(/^[¡¿"\s]+|[!"\s]+$/g, '').trim();
   res = res.replace(/¡/g, '').replace(/¿/g, '');
-  // Quitar uno o más puntos finales o elipsis
-  res = res.replace(/\.+$/g, '').trim();
+  // Limpiar cada párrafo: quitar puntos finales y asegurar que la primera letra sea SIEMPRE mayúscula
+  res = res
+    .split(/\n+/)
+    .map(line => {
+      let cleanLine = line.trim().replace(/\.+$/g, '').trim();
+      return capitalizeFirstLetter(cleanLine);
+    })
+    .filter(Boolean)
+    .join('\n');
   return res;
 }
 
@@ -541,7 +555,7 @@ function getRandomGreeting(date = new Date()) {
       "Buen dia, que tal",
       "Buenas, que tal",
       "Hola, que tal",
-      "buen dia, como estas?",
+      "Buen dia, como estas?",
       "Buenas, como va?"
     ];
     return options[Math.floor(Math.random() * options.length)];
@@ -551,7 +565,7 @@ function getRandomGreeting(date = new Date()) {
       "Buenas tardes, que tal",
       "Buenas, que tal",
       "Hola, que tal",
-      "buenas tardes, como estas?",
+      "Buenas tardes, como estas?",
       "Buenas, como va?"
     ];
     return options[Math.floor(Math.random() * options.length)];
@@ -561,7 +575,7 @@ function getRandomGreeting(date = new Date()) {
       "Buenas noches, que tal",
       "Buenas, que tal",
       "Hola, que tal",
-      "buenas noches, como estas?",
+      "Buenas noches, como estas?",
       "Buenas, como va?"
     ];
     return options[Math.floor(Math.random() * options.length)];
@@ -593,60 +607,69 @@ Sos Facu o Ramiro del equipo de soporte técnico de Sistemas de Mi Gusto (Argent
 Atendés tanto a las SUCURSALES/FRANQUICIAS (en grupos o privado) como a compañeros de OFICINA / PLANTA (en privado). Nadie debe sospechar jamás que sos una IA o un bot
 
 REGLAS OBLIGATORIAS DE ESCRITURA HUMANA EN WHATSAPP (MAXIMA PRIORIDAD):
-1. PROHIBIDO USAR PUNTOS FINALES: En WhatsApp nadie pone punto al final de los mensajes porque suena cortante, frío o robótico. NUNCA cierres un mensaje con punto
-2. PROHIBIDO USAR SIGNOS DE APERTURA: Jamás uses '¿' ni '¡'. Escribí como se tipea rápido desde el celular ('buenas, como va?', 'pasame captura')
-3. NUNCA digas que sos una IA, bot, modelo ni asistente virtual. Sos Facu o Ramiro de Sistemas
-4. CERO FORMALISMOS: Prohibido decir 'Estimado', 'Cordial saludo', 'En qué puedo colaborarle', 'Atentamente'. Hablá en criollo argentino natural: 'buenas, como va?', 'quedate tranqui', 'bancame un toque', 'ahi bajamos y lo miramos'
-5. MENSAJES CORTOS Y DIRECTOS: De 1 o 2 oraciones concisas al grano. Sin listas ni viñetas
+1. PRIMERA LETRA SIEMPRE EN MAYUSCULA: Todo mensaje o párrafo debe empezar SIEMPRE con la primera letra en mayúscula (ej: 'Buenas, como va?', 'No te preocupes, ya enseguida lo solucionamos')
+2. PROHIBIDO USAR PUNTOS FINALES: En WhatsApp nadie pone punto al final de los mensajes porque suena cortante, frío o robótico. NUNCA cierres un mensaje con punto
+3. PROHIBIDO USAR SIGNOS DE APERTURA: Jamás uses '¿' ni '¡'. Escribí como se tipea rápido desde el celular ('Buenas, como va?', 'Pasame una captura')
+4. NUNCA digas que sos una IA, bot, modelo ni asistente virtual. Sos Facu o Ramiro de Sistemas
+5. TONO HUMILDE, CALIDO Y BUENA GENTE (FUNDAMENTAL):
+   - Nunca des órdenes secas ni imperativas (JAMAS digas 'Cambiá el cable' o 'Chequeá tal cosa' a secas). Hablá siempre con humildad y buena onda usando frases como: 'probá cambiar...', 'intentemos...', 'prueben hacer tal cosa...', 'fijate si podés probar...'
+   - Si a la persona se la nota preocupada, apurada o angustiada por un problema, SIEMPRE tranquilizala diciendo: 'No te preocupes, ya enseguida lo solucionamos'
+   - Cero formalismos robóticos ('Estimado', 'Cordial saludo'). Hablá en criollo argentino cercano y servicial
+6. MENSAJES CORTOS Y DIRECTOS: De 1 o 2 oraciones concisas al grano. Sin listas ni viñetas
 
 MANUAL OPERATIVO DE RESOLUCION TECNICA DE MI GUSTO (SEGUIR AL PIE DE LA LETRA):
 1. TONER O IMPRESORA DE OFICINA NO FUNCIONA (HARDWARE / REPUESTO):
-   - Si piden cambio de tóner o avisan que una impresora común no funciona físicamente: 'quedate tranqui, ya mismo nos contactamos con Samuel para que nos traiga el repuesto o venga a hacerle el mantenimiento'
+   - Si piden cambio de tóner o avisan que una impresora común no funciona físicamente: 'No te preocupes, ya enseguida lo solucionamos, ahí mismo nos contactamos con Samuel para que nos traiga el repuesto o venga a hacerle el mantenimiento'
 2. IMPRESORA TIRA ERROR EN LA PC:
-   - Si reportan que la impresora les tira un cartel de error en la computadora: 'quedate tranqui que enseguida bajamos y la revisamos'
+   - Si reportan que la impresora les tira un cartel de error en la computadora: 'No te preocupes, ya enseguida lo solucionamos, ahí bajamos y la revisamos'
 3. PROBLEMAS DE INTERNET / WIFI / RED:
-   - Asegurar siempre solución inmediata: 'quedate tranqui que enseguida lo revisamos y te lo solucionamos'
+   - Asegurar siempre solución inmediata: 'No te preocupes, ya enseguida lo solucionamos y lo dejamos andando'
 4. NAS O QSYNC CLIENT (CARPETAS COMPARTIDAS / SINCRONIZACION):
-   - Para cualquier problema o solicitud de NAS o Qsync Client, pedir SIEMPRE captura del error y código de AnyDesk para repararlo remoto: 'pasame una captura del error que te tira el Qsync/NAS y el código de AnyDesk así nos conectamos y te lo reparamos de forma remota'
-5. CUALQUIER ASISTENCIA REMOTA:
-   - Para todo lo que requiera conectarse remoto o instalar algo a distancia, pedir SIEMPRE el código/número de AnyDesk: 'pasame el código de AnyDesk así me conecto y lo vemos'
-6. ERRORES EN COMPUTADORAS / PC:
-   - Para cualquier error que les salga en la computadora, pedir SIEMPRE captura o foto de la pantalla para ubicar mejor el problema: 'mandame una captura o foto de la pantalla con el error así lo ubicamos mejor y te ayudamos'
+   - Para cualquier problema o solicitud de NAS o Qsync Client, pedir captura del error para revisarlo: 'No te preocupes, ya enseguida lo solucionamos, pasanos porfa un screenshot del error que te tira el Qsync/NAS así lo analizamos'
+5. REGLA ESTRICTA DE ANYDESK (USO EXCLUSIVO PARA COMANDERAS):
+   - AnyDesk SOLAMENTE y UNICAMENTE se usa para instalar comanderas nuevas o solucionarle algún error a una comandera. PROHIBIDO mencionar o pedir AnyDesk para cualquier otra cosa (NUNCA pidas AnyDesk para promos, sistema de ventas, pantallas, TV Box, NAS ni otros temas)
+6. PROBLEMAS DE SISTEMA DE VENTAS / ERRORES EN PC:
+   - Para cualquier problema en el sistema de ventas o error en la PC, pedir SIEMPRE screenshot/captura del error que les aparece para analizarlo: 'No te preocupes, ya enseguida lo solucionamos, pasanos porfa un screenshot o foto del error que les aparece en el sistema de ventas así lo analizamos bien'
 7. PROBLEMAS DE COMANDERA (EN SUCURSALES):
-   - Si una comandera térmica no imprime o se cuelga: 'cambiá el cable de la comandera a otro puerto USB de la PC porque a veces se bugea el puerto, y probá si levanta'
-   - Si necesitan instalar una comandera desde cero: 'pasame el código de AnyDesk de la PC así nos conectamos remoto y te la dejamos instalada'
+   - Para problemas de comandera, SIEMPRE pedir screenshot/foto del error que les aparece para analizarlo y sugerir con humildad probar otro puerto USB: 'No te preocupes, ya enseguida lo solucionamos. Probá cambiar el cable de la comandera a otro puerto USB de la PC porque a veces se bugea el puerto, y pasanos un screenshot del error que te aparece para analizarlo (o el código de AnyDesk si sigue sin levantar)'
+   - Si necesitan instalar una comandera nueva: 'Dale, no hay problema, pasanos el código de AnyDesk de la PC así nos conectamos un toque y te dejamos instalada la comandera'
 8. PROMOCION NO APARECE EN EL SISTEMA:
-   - 'quedate tranqui, enseguida mandamos una actualización al sistema para corregir ese bug de visualización y que les aparezca la promo'
+   - Si a alguien no le aparece una promo en el sistema o botonera: asegurarle que enseguida mandamos una actualización para corregir el error de visualización: 'No te preocupes, ya enseguida lo solucionamos, ahí mandamos una actualización al sistema para corregir el error de visualización y que les aparezca la promo'
+   - Si vuelven a consultar por la promo: avisar que ya mandamos la actualización y que prueben recargar el sistema con F5: 'Ya mandamos la actualización al sistema, prueben recargar con F5 y fijate que ya les tiene que aparecer'
 9. PRODUCTO APARECE SIN STOCK:
-   - 'eso lo tienen que habilitar ustedes desde el sistema entrando a la pestaña de Ver Stock, ahí le cargan el stock al producto y ya los deja vender'
+   - 'No te preocupes, prueben habilitarlo ustedes desde el sistema entrando a la pestaña de Ver Stock, ahí le cargan el stock al producto y ya los deja vender'
 10. PANTALLAS / TELEVISORES DE SUCURSAL Y TV BOX (DATALIVETV):
-   - Los TV Box proyectan las pantallas usando la app DataliveTV (descargada desde Google Play)
-   - Estado de las luces del TV Box: cuando está enchufado pero en espera tiene LUZ ROJA, cuando está prendido funcionando tiene LUZ AZUL, y si NO tiene ninguna luz está desenchufado o sin corriente
-   - Si las pantallas están en negro o sin señal: pediles que revisen el TV Box y deciles qué luz tiene (tiene que estar en luz azul; si está en luz roja que lo prendan del control, y si no tiene ninguna luz que revisen el transformador/enchufe y el cable HDMI)
-   - Si el TV Box está en luz azul pero no muestra las placas, que entren a la app DataliveTV
-   - Si tienen mal los precios en pantalla: 'quedate tranqui que enseguida les mandamos la actualización para corregir los precios de las pantallas'
+   - Si son problemas de pantallas donde NO se ven precios, tienen algún error, no encienden o están apagadas:
+     * Pedir SIEMPRE foto/screenshot del error o de cómo se ve la pantalla para analizarlo
+     * SIEMPRE PRIMERO sugerir con amabilidad que prueben desloguear y volver a loguear la cuenta de DataliveTV
+     * Si el TV Box NO da imagen en la pantalla: sugerir que prueben chequear el cable HDMI (y que el TV Box esté encendido con luz azul)
+     * Si el TV Box NO da luces (está totalmente apagado): sugerir que prueben chequear el cable de alimentación / transformador
+   - Ejemplo: 'No te preocupes, ya enseguida lo solucionamos. Primero prueben desloguear y volver a loguear la cuenta de DataliveTV, si el TV Box no da imagen probá chequear el cable HDMI y si no da luces probá chequear el cable de alimentación. Si les tira algún error pasanos foto o screenshot para analizarlo'
 11. COMANDA DUPLICADA:
-   - 'quedate tranqui, podés eliminar la segunda comanda sin problema porque con la primera ya queda registrado correctamente el pedido'
-    12. PROVEEDOR DE SISTEMA:
+   - 'No te preocupes, prueben eliminar la segunda comanda sin problema porque con la primera ya queda registrado correctamente el pedido'
+12. PROVEEDOR DE SISTEMA:
    - Nuestro único proveedor de software gastronómico es Datalive (JAMAS menciones a Maxirest)
 13. ZONAS DE DELIVERY O MAPAS:
-   - Si piden modificar, ampliar, achicar o cambiar zonas de delivery o mapas de reparto, SIEMPRE pedir la confirmación/autorización de su supervisor (Damaris, Lidya, Selene, Martín Sastre, Elizabeth Colman o Evelyn Cedrón) antes de realizar cualquier cambio: 'para hacer cambios en las zonas de delivery o mapas necesitamos primero la confirmación de tu supervisor, pedile que nos autorice por acá y lo modificamos enseguida'
+   - Si piden modificar, ampliar, achicar o cambiar zonas de delivery o mapas de reparto, SIEMPRE pedir la confirmación/autorización de su supervisor (Damaris, Lidya, Selene, Martín Sastre, Elizabeth Colman o Evelyn Cedrón) antes de realizar cualquier cambio: 'Para hacer cambios en las zonas de delivery o mapas necesitamos primero la confirmación de tu supervisor, pedile porfa que nos autorice por acá y ya enseguida lo modificamos'
 14. COMPORTAMIENTO SEGUN EL GRUPO O CHAT PRIVADO (Y LISTA DE SUPERVISORAS DE TIENDA):
    - Las supervisoras/es de tienda son: Damaris, Lidya, Selene, Martín Sastre, Elizabeth Colman y Evelyn Cedrón
    - GRUPO PRINCIPAL DE OPERACIONES / PROCESOS ('Procesos - Mi Gusto' u 'Operaciones'):
-     * Si nos arroba directamente una SUCURSAL: respondé dejando asentado que se tomó el pedido/caso y que ya les hablamos por privado para resolverlo (ej: 'buenas, ahi tomamos el caso y te escribimos por privado para resolverlo')
-     * Si nos arroba una SUPERVISORA DE TIENDA (Damaris, Lidya, Selene, Martín Sastre, Elizabeth Colman o Evelyn Cedrón, avisando por una sucursal o citando el reclamo de una tienda): respondé dejando asentado que tomamos el caso y que ya nos comunicamos por privado DIRECTAMENTE CON LA SUCURSAL para resolverlo (ej: 'buenas, ahi tomamos el caso y ya le escribimos por privado a la sucursal para resolverlo')
-   - CUALQUIER OTRO GRUPO (que no sea Operaciones/Procesos): respondé SIEMPRE dejando asentado que se toma el caso y que ya lo estamos viendo/revisando (podés sumar el tip rápido si aplica). Ejemplo: 'buenas, ahi tomamos el caso y ya lo estamos viendo'
-   - CHAT PRIVADO (1 a 1): mantené una conversación continua, acertada, inteligente y super servicial. Respondé con inmediatez resolviendo dudas, guiando paso a paso o pidiendo los datos clave (sucursal, código de AnyDesk, captura de pantalla) para adelantar el trabajo hasta que el técnico de guardia tome el celular y continúe manualmente
+     * Si nos arroba directamente una SUCURSAL: respondé dejando asentado que se tomó el pedido/caso y que ya les hablamos por privado para resolverlo (ej: 'Buenas, ahi tomamos el caso, no te preocupes que ya te escribimos por privado para solucionarlo')
+     * Si nos arroba una SUPERVISORA DE TIENDA (Damaris, Lidya, Selene, Martín Sastre, Elizabeth Colman o Evelyn Cedrón, avisando por una sucursal o citando el reclamo de una tienda): respondé dejando asentado que tomamos el caso y que ya nos comunicamos por privado DIRECTAMENTE CON LA SUCURSAL para resolverlo (ej: 'Buenas, ahi tomamos el caso y ya le escribimos por privado a la sucursal para solucionarlo')
+   - CUALQUIER OTRO GRUPO (que no sea Operaciones/Procesos): respondé SIEMPRE dejando asentado que se toma el caso y que ya lo estamos viendo/revisando con tono humilde y servicial. Ejemplo: 'Buenas, ahi tomamos el caso, no te preocupes que ya enseguida lo solucionamos'
+   - CHAT PRIVADO (1 a 1): mantené una conversación continua, acertada, humilde y super servicial. Guiá paso a paso diciendo 'probá...', 'intentemos...', 'prueben...' y pedí screenshot/foto del error cuando sea de comanderas, pantallas o sistema de ventas hasta que el técnico de guardia tome el celular y continúe manualmente
+15. TRATO ESPECIAL DE AMIGOS CON MARIA SALAZAR ('MARI') Y ALEXANDRA RAMIREZ ('ALE'):
+   - Si quien nos escribe es María Salazar (Maria Salazar) o Alexandra Ramírez (Alexandra Ramirez), ellas son amigas de confianza y NO se les habla como a un usuario común
+   - A María Salazar llamala siempre 'Mari' y hablale en tono bien de amigos (ej: 'Dale Mari, no te preocupes, enseguida lo hacemos', 'Buenas Mari, ya lo vemos y te aviso')
+   - A Alexandra Ramírez llamala siempre 'Ale' y hablale en tono bien de amigos (ej: 'Dale Ale, ya lo vemos y te aviso', 'Dale Ale, no te preocupes, enseguida lo hacemos')
 `;
 
 async function getGeminiAcknowledgement(incomingText = '', branchName = '', customPrompt = '', customApiKey = '') {
-  const apiKey = customApiKey || process.env.GEMINI_API_KEY;
+  const apiKey = resolveActiveApiKey(customApiKey);
   if (!apiKey) return null;
 
   try {
-    const { GoogleGenerativeAI } = require('@google/generative-ai');
-    const ai = new GoogleGenerativeAI(apiKey);
+    const ai = getGenAIClient(apiKey);
     const learnedBlock = buildLearnedContextPrompt(incomingText);
     const baseSys = customPrompt && customPrompt.trim().length > 20 
       ? `${customPrompt}\n\nIMPORTANTE: NUNCA uses signos de apertura (¡ o ¿) ni puntos finales. Sé conciso (1-2 oraciones cortas)`
@@ -659,7 +682,7 @@ async function getGeminiAcknowledgement(incomingText = '', branchName = '', cust
 
     const prompt = `${promptContext}\nMensaje de la sucursal: "${incomingText}"\nGenera una respuesta resolutiva, experta y natural en 1 o 2 oraciones sin punto final:`;
     
-    const candidateModels = ['gemini-3.5-flash-lite', 'gemini-3.5-flash', 'gemini-3.1-flash-lite'];
+    const candidateModels = getOrderedCandidateModels();
     for (const modelName of candidateModels) {
       try {
         const model = ai.getGenerativeModel({ model: modelName, systemInstruction });
@@ -731,10 +754,27 @@ let cachedApiKey = null;
 
 // Salud dinámica de modelos para evitar demoras de 503
 const modelHealth = new Map([
-  ['gemini-3.5-flash', { cooldownUntil: 0 }],
+  ['gemini-3.1-flash-lite', { cooldownUntil: 0 }],
   ['gemini-3.5-flash-lite', { cooldownUntil: 0 }],
-  ['gemini-3.1-flash-lite', { cooldownUntil: 0 }]
+  ['gemini-3.5-flash', { cooldownUntil: 0 }]
 ]);
+
+function resolveActiveApiKey(customApiKey = '') {
+  if (customApiKey && customApiKey.trim()) return customApiKey.trim();
+  if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim()) return process.env.GEMINI_API_KEY.trim();
+  try {
+    const envPath = path.join(__dirname, '.env');
+    if (fs.existsSync(envPath)) {
+      const content = fs.readFileSync(envPath, 'utf8');
+      const match = content.match(/GEMINI_API_KEY\s*=\s*([^\r\n#]+)/);
+      if (match && match[1]) {
+        process.env.GEMINI_API_KEY = match[1].trim();
+        return process.env.GEMINI_API_KEY;
+      }
+    }
+  } catch (_) {}
+  return '';
+}
 
 function getGenAIClient(apiKey) {
   if (!apiKey) return null;
@@ -749,7 +789,7 @@ function getGenAIClient(apiKey) {
 
 function getOrderedCandidateModels() {
   const now = Date.now();
-  const all = ['gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite'];
+  const all = ['gemini-3.1-flash-lite', 'gemini-3.5-flash-lite', 'gemini-3.5-flash'];
   // Primero los modelos que no están en penalización por 503/timeout
   const healthy = all.filter(m => (modelHealth.get(m)?.cooldownUntil || 0) <= now);
   const cooling = all.filter(m => (modelHealth.get(m)?.cooldownUntil || 0) > now);
@@ -818,20 +858,58 @@ function isMainOperationsGroup(chatTitle = '') {
 }
 
 // ==========================================
-// 8.6. CONTROL DE INTERVENCIÓN HUMANA EN PRIVADO (HANDOFF)
+// 8.6. CONTROL DE INTERVENCIÓN HUMANA Y SESIONES ACTIVAS DE CONVERSACIÓN CONTINUA
 // ==========================================
 /**
- * Cuando un técnico responde manualmente en un chat privado desde el celular de guardia,
- * el bot le cede el control de esa conversación privada para no pisarse con el humano,
- * pero sigue registrando y aprendiendo de todo lo que el técnico responde.
- * Si pasan 2 horas sin actividad manual, el bot vuelve a quedar listo como primera línea.
+ * Cuando un técnico responde manualmente desde el celular de guardia (msg.fromMe),
+ * el bot le cede el control de esa conversación (en privado o en ese grupo) para no pisarse con el humano,
+ * mientras sigue registrando y aprendiendo de todo lo que el técnico responde.
+ * Mientras ningún humano intervenga desde el celu de la guardia, el bot mantiene la conversación
+ * continua automáticamente (incluso cuando la persona repregunta sin volver a arrobar @Sistemas).
  */
 const manualTakeoverChats = new Map(); // chatId -> timestamp of last human manual message
-const HUMAN_TAKEOVER_DURATION_MS = 2 * 60 * 60 * 1000; // 2 horas de ventana de conversación manual
+const HUMAN_TAKEOVER_DURATION_MS = 2 * 60 * 60 * 1000; // 2 horas de ventana de conversación manual en privado
+const GROUP_TAKEOVER_DURATION_MS = 25 * 60 * 1000; // 25 minutos en grupos cuando interviene el humano desde el celu de guardia
+
+// Seguimiento de hilos activos donde el bot ya está conversando con un usuario (para que no tengan que arrobar en cada repregunta)
+const activeBotConversations = new Map(); // chatId -> { senderIds: Set<string>, lastActivityMs: number }
+const ACTIVE_BOT_THREAD_MS = 30 * 60 * 1000; // 30 minutos de charla continua activa
+
+function startOrRefreshBotConversation(chatId = '', senderId = '') {
+  if (!chatId) return;
+  const cleanSender = (senderId || '').split('@')[0];
+  let entry = activeBotConversations.get(chatId);
+  if (!entry) {
+    entry = { senderIds: new Set(), lastActivityMs: Date.now() };
+    activeBotConversations.set(chatId, entry);
+  }
+  if (cleanSender) entry.senderIds.add(cleanSender);
+  entry.lastActivityMs = Date.now();
+}
+
+function isConversationActiveForSender(chatId = '', senderId = '') {
+  if (!chatId) return false;
+  if (isChatUnderHumanControl(chatId)) return false;
+  const entry = activeBotConversations.get(chatId);
+  if (!entry) return false;
+  if (Date.now() - entry.lastActivityMs > ACTIVE_BOT_THREAD_MS) {
+    activeBotConversations.delete(chatId);
+    return false;
+  }
+  // Una vez iniciada la conversación con el bot en ese chat, cualquier repregunta en ese hilo continúa la charla
+  // hasta que alguien intervenga manualmente desde el celular de la guardia (msg.fromMe)
+  return true;
+}
+
+function clearBotConversation(chatId = '') {
+  if (!chatId) return;
+  activeBotConversations.delete(chatId);
+}
 
 function markHumanTakeover(chatId = '') {
-  if (!chatId || chatId.endsWith('@g.us')) return;
+  if (!chatId) return;
   manualTakeoverChats.set(chatId, Date.now());
+  activeBotConversations.delete(chatId);
 }
 
 function clearHumanTakeover(chatId = '') {
@@ -840,10 +918,11 @@ function clearHumanTakeover(chatId = '') {
 }
 
 function isChatUnderHumanControl(chatId = '') {
-  if (!chatId || chatId.endsWith('@g.us')) return false;
+  if (!chatId) return false;
   if (!manualTakeoverChats.has(chatId)) return false;
   const lastManualTime = manualTakeoverChats.get(chatId);
-  if (Date.now() - lastManualTime >= HUMAN_TAKEOVER_DURATION_MS) {
+  const ttl = chatId.endsWith('@g.us') ? GROUP_TAKEOVER_DURATION_MS : HUMAN_TAKEOVER_DURATION_MS;
+  if (Date.now() - lastManualTime >= ttl) {
     manualTakeoverChats.delete(chatId);
     return false;
   }
@@ -1050,6 +1129,22 @@ function resolveGroupIncidentTarget({
 }
 
 /**
+ * Detecta si el contacto que escribe es María Salazar ("Mari") o Alexandra Ramírez ("Ale")
+ * para activar automáticamente el trato cercano de amigos.
+ */
+function detectCloseFriend(senderName = '') {
+  const norm = normalizeText(senderName);
+  if (!norm) return null;
+  if (norm.includes('maria salazar') || norm.includes('mari salazar') || /\bsalazar\b/.test(norm)) {
+    return { isFriend: true, nickname: 'Mari', fullName: 'María Salazar' };
+  }
+  if (norm.includes('alexandra ramirez') || norm.includes('ale ramirez') || /\balexandra\b/.test(norm)) {
+    return { isFriend: true, nickname: 'Ale', fullName: 'Alexandra Ramírez' };
+  }
+  return null;
+}
+
+/**
  * Genera una respuesta continua conversacional con Gemini recordando el hilo del chat y lo aprendido.
  */
 async function getContinuousChatResponse({
@@ -1063,7 +1158,7 @@ async function getContinuousChatResponse({
   customPrompt,
   customApiKey
 }) {
-  const apiKey = customApiKey || process.env.GEMINI_API_KEY;
+  const apiKey = resolveActiveApiKey(customApiKey);
   if (!apiKey) return null;
 
   try {
@@ -1077,24 +1172,35 @@ async function getContinuousChatResponse({
     const branchName = detectedBranchOverride || detectBranch(incomingText, `${senderName} ${chatTitle}`) || 'No especificada';
     const history = getChatHistory(chatId);
     const isMainOps = isGroup && isMainOperationsGroup(chatTitle);
+    const isFollowUpTurn = history.length > 0;
+    const friendInfo = detectCloseFriend(senderName);
+    const friendNote = friendInfo
+      ? ` (NOTA ESPECIAL DE AMIGOS: Quien te escribe es ${friendInfo.fullName}, que es amiga de mucha confianza. Respondé SIEMPRE en tono bien de amigos, llamándola "${friendInfo.nickname}", usando expresiones como "Dale ${friendInfo.nickname}, ya lo vemos y te aviso" o "Dale ${friendInfo.nickname}, no te preocupes, enseguida lo hacemos")`
+      : '';
 
     let groupInstruction = '';
     if (isMainOps) {
       if (isSupervisor) {
         const targetLabel = branchName && branchName !== 'No especificada' ? `la sucursal ${branchName}` : 'la sucursal';
-        groupInstruction = ` (NOTA OBLIGATORIA: Estás en el grupo principal "Procesos - Mi Gusto" y quien nos arrobó es una SUPERVISORA DE TIENDA avisándonos por ${targetLabel}. Respondé dejando asentado que tomamos el caso y que ya nos comunicamos por privado DIRECTAMENTE CON LA SUCURSAL para resolverlo, ej: "buenas, ahi tomamos el caso y ya le escribimos por privado a la sucursal para resolverlo")`;
+        groupInstruction = ` (NOTA OBLIGATORIA: Estás en el grupo principal "Procesos - Mi Gusto" y quien nos arrobó es una SUPERVISORA DE TIENDA avisándonos por ${targetLabel}. Respondé dejando asentado que tomamos el caso y que ya nos comunicamos por privado DIRECTAMENTE CON LA SUCURSAL para resolverlo, ej: "Buenas, ahi tomamos el caso y ya le escribimos por privado a la sucursal para resolverlo")`;
       } else {
         groupInstruction = ' (NOTA OBLIGATORIA: Estás en el grupo principal de Operaciones "Procesos - Mi Gusto" y nos escribió la sucursal. Respondé dejando asentado que se tomó el pedido/caso y que ya le vamos a hablar por privado para resolverlo, para no llenar el grupo de mensajes)';
       }
     } else if (isGroup) {
-      groupInstruction = ' (NOTA OBLIGATORIA: Estás en un grupo que NO es operaciones. Respondé dejando asentado que se toma el caso y que ya lo estamos viendo/revisando, sumando un tip rápido si aplica)';
+      if (isFollowUpTurn) {
+        groupInstruction = ' (NOTA: Estás continuando la conversación en el grupo con esta persona. Respondé directamente a su repregunta o duda con total seguridad, inteligencia y naturalidad, sin volver a saludar ni repetir que tomamos el caso. Empezá siempre con la primera letra en mayúscula y recordá que AnyDesk solo se usa para comanderas)';
+      } else {
+        groupInstruction = ' (NOTA OBLIGATORIA: Estás en un grupo que NO es operaciones. Respondé dejando asentado que se toma el caso y que ya lo estamos viendo/revisando, sumando el paso o solución si aplica. Empezá siempre con la primera letra en mayúscula)';
+      }
     } else {
-      groupInstruction = ' (NOTA: Estás en chat privado 1 a 1. Respondé con inmediatez de forma acertada, inteligente y super servicial para mantener la conversación fluida y adelantar el diagnóstico o solución hasta que el técnico tome el celular)';
+      groupInstruction = isFollowUpTurn
+        ? ' (NOTA: Estás continuando la conversación en chat privado 1 a 1. Respondé directamente a lo que te acaba de decir de forma fluida, acertada y servicial sin volver a saludar. Empezá siempre con la primera letra en mayúscula)'
+        : ' (NOTA: Estás en chat privado 1 a 1. Respondé con inmediatez de forma acertada, inteligente y super servicial para mantener la conversación fluida y adelantar el diagnóstico o solución hasta que el técnico tome el celular. Empezá siempre con la primera letra en mayúscula)';
     }
 
     const userMessage = isGroup
-      ? `[${senderName} en grupo "${chatTitle}" - Sucursal: ${branchName}${groupInstruction}]: ${incomingText}`
-      : `[${senderName} en privado - Sucursal: ${branchName}${groupInstruction}]: ${incomingText}`;
+      ? `[${senderName} en grupo "${chatTitle}" - Sucursal: ${branchName}${groupInstruction}${friendNote}]: ${incomingText}`
+      : `[${senderName} en privado - Sucursal: ${branchName}${groupInstruction}${friendNote}]: ${incomingText}`;
 
     const candidateModels = getOrderedCandidateModels();
     let result = null;
@@ -1140,6 +1246,7 @@ async function getContinuousChatResponse({
 const LEARNED_MEMORY_PATH = path.join(__dirname, 'learned_memory.json');
 const lastIncomingPerChat = new Map();
 const recentBotOutputs = new Set();
+const recentBotOutputsNormalized = new Set();
 
 // Caché en memoria RAM para evitar lecturas de disco en cada mensaje
 let inMemoryLearnedCache = null;
@@ -1152,6 +1259,10 @@ const STOPWORDS_ES = new Set([
   'guardia', 'favor', 'gracias', 'dale', 'joya', 'genial', 'local', 'sucursal'
 ]);
 
+function normalizeAlphaNum(str = '') {
+  return normalizeText(str).replace(/[^a-z0-9]/g, '');
+}
+
 function extractSignificantTokens(str = '') {
   return normalizeText(str)
     .replace(/[^a-z0-9\s]/g, ' ')
@@ -1159,21 +1270,48 @@ function extractSignificantTokens(str = '') {
     .filter(w => w.length >= 3 && !STOPWORDS_ES.has(w));
 }
 
-function registerBotOutput(text = '') {
+function registerBotOutput(text = '', chatId = '') {
   if (!text) return;
   const clean = text.trim();
+  const singleSpace = clean.replace(/\s+/g, ' ').trim();
+  const alphaNum = normalizeAlphaNum(clean);
   recentBotOutputs.add(clean);
-  setTimeout(() => recentBotOutputs.delete(clean), 35000);
+  recentBotOutputs.add(singleSpace);
+  if (alphaNum) recentBotOutputsNormalized.add(alphaNum);
+
+  // También registrar cada línea individual por si se envió en burbujas
+  const lines = clean.split(/\n+/).map(l => l.trim()).filter(Boolean);
+  const lineAlphaNums = [];
+  for (const line of lines) {
+    recentBotOutputs.add(line);
+    const lAlpha = normalizeAlphaNum(line);
+    if (lAlpha) {
+      recentBotOutputsNormalized.add(lAlpha);
+      lineAlphaNums.push(lAlpha);
+    }
+  }
+
+  setTimeout(() => {
+    recentBotOutputs.delete(clean);
+    recentBotOutputs.delete(singleSpace);
+    if (alphaNum) recentBotOutputsNormalized.delete(alphaNum);
+    for (const line of lines) recentBotOutputs.delete(line);
+    for (const lAlpha of lineAlphaNums) recentBotOutputsNormalized.delete(lAlpha);
+  }, 60000);
 }
 
-function isBotGeneratedOutput(text = '') {
+function isBotGeneratedOutput(text = '', chatId = '') {
   if (!text) return false;
   const clean = text.trim();
-  if (recentBotOutputs.has(clean)) return true;
+  const singleSpace = clean.replace(/\s+/g, ' ').trim();
+  const alphaNum = normalizeAlphaNum(clean);
+  if (recentBotOutputs.has(clean) || recentBotOutputs.has(singleSpace)) return true;
+  if (alphaNum && recentBotOutputsNormalized.has(alphaNum)) return true;
   if (
     clean.startsWith('🚨 *Alerta Guardia') ||
     clean.startsWith('🤖 *Estado del Bot') ||
     clean.startsWith('🛡️ *Guardia Actual') ||
+    clean.startsWith('📊 *Reporte Semanal') ||
     clean.startsWith('✅') ||
     clean.startsWith('🧹') ||
     clean.startsWith('🛠️') ||
@@ -1185,10 +1323,33 @@ function isBotGeneratedOutput(text = '') {
   return false;
 }
 
+/**
+ * Detecta si un mensaje corto es solo un acuse o saludo ("ok", "gracias", "dale", "buenas, como va?")
+ * para no pisar la consulta real del usuario ni guardar un simple saludo como si fuera la solución técnica.
+ */
+function isTrivialAckOrGreeting(text = '') {
+  const stripped = normalizeText(text)
+    .replace(/@\d{6,18}/g, '')
+    .replace(/@(sistemas|guardia)/g, '')
+    .replace(/\b(hola|buenas|buen\s+dia|buenas\s+tardes|buenas\s+noches|como\s+va|como\s+estan|como\s+andas|que\s+tal|todo\s+bien|ok|oka|dale|gracias|muchas\s+gracias|genial|joya|buenisimo|perfecto|listo|si|ahi\s+va|ahi\s+lo\s+veo|ahi\s+lo\s+miro|bancame\s+un\s+toque|chicos|che)\b/g, '')
+    .replace(/[^a-z0-9]/g, '')
+    .trim();
+  return stripped.length < 4;
+}
+
 function recordIncomingForLearning(chatId, text, senderName = 'Usuario') {
   if (!chatId || !text) return;
-  const clean = text.trim();
-  if (clean.startsWith('#') || clean.length < 3) return;
+  const clean = text.replace(/@\d{6,18}/g, '').replace(/@(sistemas|guardia)/gi, '').trim();
+  if (clean.startsWith('#') || clean.length < 4) return;
+
+  // Si ya hay una consulta real guardada hace menos de 30 min y el nuevo mensaje es solo "ok gracias" o "dale",
+  // no pisamos la consulta original para que cuando Facu o Ramiro respondan se asocie al problema real
+  if (lastIncomingPerChat.has(chatId)) {
+    const prev = lastIncomingPerChat.get(chatId);
+    if (Date.now() - prev.timestamp < 30 * 60 * 1000 && isTrivialAckOrGreeting(clean)) {
+      return;
+    }
+  }
 
   // Limpiar entradas viejas si el mapa crece
   if (lastIncomingPerChat.size > 200) {
@@ -1197,7 +1358,7 @@ function recordIncomingForLearning(chatId, text, senderName = 'Usuario') {
   }
 
   lastIncomingPerChat.set(chatId, {
-    text: clean.replace(/@\d{7,16}/g, '').trim(),
+    text: clean,
     senderName,
     timestamp: Date.now()
   });
@@ -1230,40 +1391,53 @@ function writeLearnedMemory(data) {
     } catch (e) {
       console.warn('[Auto-Learn] Error guardando learned_memory.json:', e.message);
     }
-  }, 300);
+  }, 250);
 }
 
 /**
  * Registra una respuesta escrita manualmente por Facu o Ramiro para que el bot aprenda su vocabulario y soluciones.
+ * Soporta respuestas enviadas en varias burbujas seguidas (las unifica dentro de una ventana de 2 minutos).
  */
 function learnFromHumanReply(chatId, humanReplyText = '', quotedQuestionText = '', techName = 'Técnico') {
   const cleanReply = cleanHumanText(humanReplyText);
-  // Ignorar respuestas monosilábicas ("ok", "si", "dale", "ya va") o comandos
-  if (cleanReply.length < 8 || cleanReply.startsWith('#')) return false;
-  if (isBotGeneratedOutput(humanReplyText) || isBotGeneratedOutput(cleanReply)) return false;
+  // Ignorar respuestas muy cortas ("ok", "si", "dale") o comandos
+  if (cleanReply.length < 6 || cleanReply.startsWith('#')) return false;
+  if (isBotGeneratedOutput(humanReplyText, chatId) || isBotGeneratedOutput(cleanReply, chatId)) return false;
 
   const memory = readLearnedMemory();
 
-  // 1. Guardar en frases de estilo si aporta vocabulario nuevo
+  // 1. Guardar siempre en frases de estilo si aporta vocabulario/modismos nuevos de Facu o Ramiro
   const replyNorm = normalizeText(cleanReply);
   const alreadyInStyle = memory.stylePhrases.some(p => normalizeText(p) === replyNorm);
   if (!alreadyInStyle) {
     memory.stylePhrases.unshift(cleanReply);
-    if (memory.stylePhrases.length > 75) memory.stylePhrases.pop();
+    if (memory.stylePhrases.length > 85) memory.stylePhrases.pop();
   }
 
-  // 2. Determinar a qué pregunta/incidente respondió el humano
-  let questionContext = (quotedQuestionText || '').replace(/@\d{7,16}/g, '').trim();
+  // Si la burbuja fue únicamente un saludo inicial ("Buenas, como va?", "Ahi lo miro"),
+  // aprendemos el modismo pero dejamos lista la pregunta en espera de la siguiente burbuja con la solución técnica
+  if (isTrivialAckOrGreeting(cleanReply)) {
+    writeLearnedMemory(memory);
+    console.log(`[🧠 Auto-Entrenamiento] Saludo/modismo aprendido (${techName}): "${cleanReply}"`);
+    return true;
+  }
+
+  // 2. Determinar a qué pregunta/incidente respondió Facu o Ramiro
+  let questionContext = (quotedQuestionText || '')
+    .replace(/@\d{6,18}/g, '')
+    .replace(/@(sistemas|guardia)/gi, '')
+    .trim();
+
   if (!questionContext && chatId && lastIncomingPerChat.has(chatId)) {
     const lastInc = lastIncomingPerChat.get(chatId);
-    if (Date.now() - lastInc.timestamp < 45 * 60 * 1000) {
+    if (Date.now() - lastInc.timestamp < 60 * 60 * 1000) {
       questionContext = lastInc.text;
     }
   }
 
-  if (questionContext && questionContext.length >= 5) {
+  if (questionContext && questionContext.length >= 4 && !isTrivialAckOrGreeting(questionContext)) {
     const qTokens = extractSignificantTokens(questionContext);
-    // Buscar si ya existe una pregunta muy similar (>= 75% de tokens coincidentes) para actualizarla en vez de duplicarla
+    // Buscar si ya existe una pregunta muy similar (>= 70% de tokens coincidentes)
     let existingIdx = -1;
     for (let i = 0; i < memory.qaPairs.length; i++) {
       const itemNorm = normalizeText(memory.qaPairs[i].question);
@@ -1275,30 +1449,46 @@ function learnFromHumanReply(chatId, humanReplyText = '', quotedQuestionText = '
         const itemTokens = extractSignificantTokens(memory.qaPairs[i].question);
         const matches = qTokens.filter(t => itemTokens.includes(t)).length;
         const similarity = matches / Math.max(qTokens.length, itemTokens.length);
-        if (similarity >= 0.75) {
+        if (similarity >= 0.70) {
           existingIdx = i;
           break;
         }
       }
     }
 
-    const entry = {
-      question: questionContext,
-      humanAnswer: cleanReply,
-      learnedBy: techName,
-      timestamp: new Date().toISOString()
-    };
-
+    const nowMs = Date.now();
     if (existingIdx !== -1) {
+      const prevEntry = memory.qaPairs[existingIdx];
+      const prevTimeMs = prevEntry.timestamp ? new Date(prevEntry.timestamp).getTime() : 0;
+      const isMultiBubbleContinuation = (nowMs - prevTimeMs < 2 * 60 * 1000) &&
+        !normalizeText(prevEntry.humanAnswer).includes(replyNorm);
+
+      const combinedAnswer = isMultiBubbleContinuation
+        ? `${prevEntry.humanAnswer}\n${cleanReply}`
+        : cleanReply;
+
+      const updatedEntry = {
+        question: questionContext,
+        humanAnswer: combinedAnswer,
+        learnedBy: techName,
+        timestamp: new Date().toISOString()
+      };
       memory.qaPairs.splice(existingIdx, 1);
-      memory.qaPairs.unshift(entry); // Mover al tope con la solución más reciente
+      memory.qaPairs.unshift(updatedEntry);
+      console.log(`[🧠 Auto-Entrenamiento] Caso actualizado (${techName}): "${questionContext}" ➔ "${combinedAnswer.replace(/\n/g, ' | ')}"`);
     } else {
+      const entry = {
+        question: questionContext,
+        humanAnswer: cleanReply,
+        learnedBy: techName,
+        timestamp: new Date().toISOString()
+      };
       memory.qaPairs.unshift(entry);
-      if (memory.qaPairs.length > 100) memory.qaPairs.pop();
+      if (memory.qaPairs.length > 150) memory.qaPairs.pop();
+      console.log(`[🧠 Auto-Entrenamiento] Nuevo caso aprendido (${techName}): "${questionContext}" ➔ "${cleanReply}"`);
     }
-    console.log(`[🧠 Auto-Entrenamiento] Caso aprendido (${techName}): "${questionContext}" ➔ "${cleanReply}"`);
   } else {
-    console.log(`[🧠 Auto-Entrenamiento] Modismo aprendido (${techName}): "${cleanReply}"`);
+    console.log(`[🧠 Auto-Entrenamiento] Expresión aprendida (${techName}): "${cleanReply}"`);
   }
 
   writeLearnedMemory(memory);
@@ -1319,40 +1509,71 @@ function buildLearnedContextPrompt(incomingText = '') {
   // Puntuar los pares Q&A por similitud semántica de palabras clave y frescura
   const scoredPairs = (memory.qaPairs || []).map((pair, idx) => {
     const pairTokens = extractSignificantTokens(pair.question);
-    let score = 0;
+    let keywordScore = 0;
     for (const qt of queryTokens) {
       if (pairTokens.some(pt => pt.includes(qt) || qt.includes(pt))) {
-        score += 4;
+        keywordScore += 5;
       }
     }
-    // Bonus de actualidad para priorizar los criterios más nuevos
-    score += Math.max(0, (20 - idx) * 0.15);
-    return { ...pair, score };
+    const recencyBonus = Math.max(0, (25 - idx) * 0.15);
+    return { ...pair, keywordScore, score: keywordScore + recencyBonus };
   });
 
   scoredPairs.sort((a, b) => b.score - a.score);
-  const topPairs = scoredPairs.slice(0, 10);
-  const recentPhrases = (memory.stylePhrases || []).slice(0, 12);
+  const directMatches = scoredPairs.filter(p => p.keywordScore >= 5).slice(0, 6);
+  const recentGeneral = scoredPairs.filter(p => p.keywordScore < 5).slice(0, 5);
+  const recentPhrases = (memory.stylePhrases || []).slice(0, 14);
 
-  let block = '\n\nMEMORIA DE AUTO-ENTRENAMIENTO (RESPUESTAS REALES DE FACU Y RAMIRO):\n';
-  block += 'Adoptá este mismo vocabulario, expresiones y soluciones reales aprendidas de nosotros:\n';
+  let block = '\n\nMEMORIA DE AUTO-ENTRENAMIENTO (SOLUCIONES Y EXPRESIONES REALES DE FACU Y RAMIRO):\n';
+  block += 'Aprendé y replicá exactamente cómo respondemos nosotros (respetando siempre primera letra en mayúscula y sin punto final):\n';
 
-  if (topPairs.length > 0) {
-    block += '\nCasos reales resueltos manualmente:\n';
-    for (const p of topPairs) {
-      block += `- Consulta: "${p.question}" ➔ Respuesta nuestra: "${p.humanAnswer}"\n`;
+  if (directMatches.length > 0) {
+    block += '\nSOLUCIONES REALES NUESTRAS PARA CASOS SIMILARES A ESTA CONSULTA (PRIORIZAR ESTE CRITERIO):\n';
+    for (const p of directMatches) {
+      block += `- Cuando preguntaron: "${p.question}" ➔ Nosotros respondimos: "${p.humanAnswer.replace(/\n/g, ' / ')}"\n`;
+    }
+  }
+
+  if (recentGeneral.length > 0) {
+    block += '\nOtros casos resueltos recientemente por nosotros:\n';
+    for (const p of recentGeneral) {
+      block += `- Consulta: "${p.question}" ➔ Respuesta nuestra: "${p.humanAnswer.replace(/\n/g, ' / ')}"\n`;
     }
   }
 
   if (recentPhrases.length > 0) {
-    block += '\nNuestro estilo real de escritura:\n';
+    block += '\nNuestro vocabulario y frases reales:\n';
     block += recentPhrases.map(f => `"${f}"`).join(' | ') + '\n';
   }
 
   return block;
 }
 
+/**
+ * Detecta si el caso reportado es que no les aparece una promoción en el sistema/botonera
+ * y el bot acaba de avisar que enseguida manda la actualización para corregir el error de visualización
+ * (para que a los pocos segundos el bot envíe automáticamente el aviso de recargar con F5).
+ */
+function isPromoVisibilityIssue(incomingText = '', botReplyText = '') {
+  const incNorm = normalizeText(incomingText);
+  const repNorm = normalizeText(botReplyText);
+
+  // Si la primera respuesta ya le dijo que toque F5, no hace falta mandar un segundo aviso duplicado de F5
+  if (/\bf5\b/i.test(repNorm)) {
+    return false;
+  }
+
+  const mentionsPromo = /\b(promo|promocion|promociones|mg\s*break)\b/i.test(incNorm) || /\b(promo|promocion)\b/i.test(repNorm);
+  const mentionsMissingOrUpdate =
+    /\b(no\s+(aparece|veo|se\s+ve|figura|sale|esta)|falta|botonera|visualizacion|actualizacion)\b/i.test(incNorm) ||
+    /\b(actualizacion|visualizacion)\b/i.test(repNorm);
+
+  return mentionsPromo && mentionsMissingOrUpdate;
+}
+
 module.exports = {
+  capitalizeFirstLetter,
+  isPromoVisibilityIssue,
   registerBotOutput,
   isBotGeneratedOutput,
   recordIncomingForLearning,
@@ -1363,6 +1584,9 @@ module.exports = {
   isMainOperationsGroup,
   recordGroupMessageContext,
   resolveGroupIncidentTarget,
+  startOrRefreshBotConversation,
+  isConversationActiveForSender,
+  clearBotConversation,
   markHumanTakeover,
   clearHumanTakeover,
   isChatUnderHumanControl,

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Radio, RefreshCw, Power, Settings, ShieldCheck, MessageSquare } from 'lucide-react';
+import { Radio, RefreshCw, Power, Trash2, Settings, ShieldCheck, MessageSquare } from 'lucide-react';
 
 export default function Navbar({ 
   status, 
@@ -161,7 +161,7 @@ export default function Navbar({
         </div>
 
         {/* Action Controls */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
           <button
             onClick={onOpenSettings}
             title="Ver Reglas y Configuración"
@@ -207,33 +207,31 @@ export default function Navbar({
             <span>{isRestarting ? 'Reiniciando...' : 'Reconectar'}</span>
           </button>
 
-          {status === 'CONNECTED' && (
-            <button
-              onClick={onLogout}
-              disabled={isLoggingOut}
-              title="Cerrar sesión de WhatsApp"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '8px 14px',
-                borderRadius: '8px',
-                backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                color: 'var(--wa-status-danger)',
-                fontSize: '13px',
-                fontWeight: '600',
-                border: '1px solid rgba(239, 68, 68, 0.3)'
-              }}
-              onMouseOver={(e) => e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.2)'}
-              onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.1)'}
-            >
-              <Power size={15} />
-              <span>{isLoggingOut ? 'Cerrando...' : 'Desvincular'}</span>
-            </button>
-          )}
+          <button
+            onClick={onLogout}
+            disabled={isLoggingOut}
+            title="Borrar la carpeta .wwebjs_auth y generar un código QR limpio para volver a conectar"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '8px 14px',
+              borderRadius: '8px',
+              backgroundColor: 'rgba(239, 68, 68, 0.12)',
+              color: 'var(--wa-status-danger)',
+              fontSize: '13px',
+              fontWeight: '600',
+              border: '1px solid rgba(239, 68, 68, 0.3)',
+              cursor: isLoggingOut ? 'wait' : 'pointer'
+            }}
+            onMouseOver={(e) => e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.22)'}
+            onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.12)'}
+          >
+            <Trash2 size={15} />
+            <span>{isLoggingOut ? 'Borrando conexión...' : 'Borrar la conexión'}</span>
+          </button>
         </div>
       </div>
     </header>
   );
 }
-

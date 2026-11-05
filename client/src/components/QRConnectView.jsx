@@ -1,7 +1,7 @@
 import React from 'react';
-import { Smartphone, RefreshCw, QrCode, Shield, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Smartphone, RefreshCw, Trash2, QrCode, Shield, CheckCircle2, AlertCircle } from 'lucide-react';
 
-export default function QRConnectView({ status, qrCode, onRestart, isRestarting }) {
+export default function QRConnectView({ status, qrCode, onRestart, onLogout, isRestarting, isLoggingOut }) {
   return (
     <div style={{
       width: '100%',
@@ -253,29 +253,60 @@ export default function QRConnectView({ status, qrCode, onRestart, isRestarting 
               )}
             </div>
 
-            {/* Refresh QR Button */}
-            <button
-              onClick={onRestart}
-              disabled={isRestarting}
-              style={{
-                marginTop: '20px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '10px 20px',
-                borderRadius: '24px',
-                backgroundColor: 'var(--wa-teal)',
-                color: '#ffffff',
-                fontSize: '13px',
-                fontWeight: '600',
-                boxShadow: '0 4px 14px rgba(0, 168, 132, 0.3)'
-              }}
-              onMouseOver={(e) => e.currentTarget.style.backgroundColor = 'var(--wa-teal-hover)'}
-              onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'var(--wa-teal)'}
-            >
-              <RefreshCw size={14} className={isRestarting ? 'animate-spin' : ''} />
-              <span>{isRestarting ? 'Actualizando QR...' : 'Recargar / Generar nuevo QR'}</span>
-            </button>
+            {/* Action Buttons under QR */}
+            <div style={{
+              marginTop: '20px',
+              display: 'flex',
+              flexWrap: 'wrap',
+              justifyContent: 'center',
+              gap: '10px'
+            }}>
+              <button
+                onClick={onRestart}
+                disabled={isRestarting}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '10px 18px',
+                  borderRadius: '24px',
+                  backgroundColor: 'var(--wa-teal)',
+                  color: '#ffffff',
+                  fontSize: '13px',
+                  fontWeight: '600',
+                  boxShadow: '0 4px 14px rgba(0, 168, 132, 0.3)'
+                }}
+                onMouseOver={(e) => e.currentTarget.style.backgroundColor = 'var(--wa-teal-hover)'}
+                onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'var(--wa-teal)'}
+              >
+                <RefreshCw size={14} className={isRestarting ? 'animate-spin' : ''} />
+                <span>{isRestarting ? 'Actualizando QR...' : 'Recargar QR'}</span>
+              </button>
+
+              {onLogout && (
+                <button
+                  onClick={onLogout}
+                  disabled={isLoggingOut}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '10px 18px',
+                    borderRadius: '24px',
+                    backgroundColor: 'rgba(239, 68, 68, 0.14)',
+                    color: 'var(--wa-status-danger)',
+                    fontSize: '13px',
+                    fontWeight: '600',
+                    border: '1px solid rgba(239, 68, 68, 0.35)'
+                  }}
+                  onMouseOver={(e) => e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.24)'}
+                  onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.14)'}
+                >
+                  <Trash2 size={14} />
+                  <span>{isLoggingOut ? 'Borrando...' : 'Borrar la conexión'}</span>
+                </button>
+              )}
+            </div>
           </div>
 
         </div>
@@ -283,4 +314,3 @@ export default function QRConnectView({ status, qrCode, onRestart, isRestarting 
     </div>
   );
 }
-

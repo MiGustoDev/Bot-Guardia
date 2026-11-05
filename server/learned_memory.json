@@ -1,9 +1,21 @@
 {
   "stylePhrases": [
-    "buenas, como va?",
-    "quedate tranqui que ahi lo miramos",
-    "pasame el codigo de anydesk asi me conecto",
-    "mandame foto o captura del error que te tira"
+    "Consulta, ayer que toners cambiaste, solo el de calidad?",
+    "Hola samu buen dia",
+    "Avisanos cualquier cosa",
+    "A vos Mari",
+    "Listo mari, ya subimos la ultima actualizacion con la mejora en la interpretacion del formato en la app",
+    "Buenas, como va?",
+    "No te preocupes, ya enseguida lo solucionamos",
+    "Probá cambiar el cable de la comandera a otro puerto",
+    "Pasanos un screenshot del error que te aparece para analizarlo"
   ],
-  "qaPairs": []
+  "qaPairs": [
+    {
+      "question": "graciasssss",
+      "humanAnswer": "A vos Mari\nAvisanos cualquier cosa",
+      "learnedBy": "Guardia Manual",
+      "timestamp": "2026-11-05T14:49:06.037Z"
+    }
+  ]
 }

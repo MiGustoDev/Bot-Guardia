@@ -110,20 +110,21 @@ function App() {
     }
   };
 
-  // Handle WhatsApp logout
+  // Handle WhatsApp logout / clear .wwebjs_auth connection
   const handleLogout = async () => {
     const confirmLogout = window.confirm(
-      '¿Estás seguro de que deseas desvincular el celular de guardia? El bot dejará de responder hasta que se vuelva a escanear un nuevo código QR.'
+      '¿Seguro que querés borrar la conexión actual? Se eliminará la carpeta de sesión (.wwebjs_auth) para generar un código QR limpio y volver a vincular.'
     );
     if (!confirmLogout) return;
 
     setIsLoggingOut(true);
     try {
-      await fetch(`${SOCKET_URL}/api/logout`, { method: 'POST' });
-      setStatus('DISCONNECTED');
       setQrCode(null);
+      setStatus('CONNECTING');
+      await fetch(`${SOCKET_URL}/api/logout`, { method: 'POST' });
     } catch (err) {
-      console.error('Error logging out:', err);
+      console.error('Error clearing connection:', err);
+      setStatus('DISCONNECTED');
     } finally {
       setIsLoggingOut(false);
     }
@@ -169,7 +170,9 @@ function App() {
               status={status}
               qrCode={qrCode}
               onRestart={handleRestart}
+              onLogout={handleLogout}
               isRestarting={isRestarting}
+              isLoggingOut={isLoggingOut}
             />
           </div>
         )}
