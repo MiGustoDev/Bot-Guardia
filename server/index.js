@@ -47,6 +47,10 @@ let currentQr = null;
 let activityLog = [];
 const botStartTime = Date.now();
 
+// Cola de mensajes entrantes con debounce por chat para agrupar mensajes enviados en ráfaga (ej: "Holis" + "Buen dia")
+const incomingMessageQueues = new Map(); // chatId -> { messages: [], timer: null, inProgress: boolean }
+const BATCH_DEBOUNCE_MS = 2500; // Esperar 2.5s por si el usuario está enviando varios mensajitos seguidos
+
 // Caché en memoria RAM para Configuración y Reglas (0ms de lectura en cada mensaje)
 let cachedRules = null;
 let cachedConfig = null;
@@ -78,7 +82,8 @@ function readConfig() {
     cachedConfig = {
       botEnabled: true,
       onlyOnMention: true,
-      mentionReplyMessage: 'No te preocupes, ya lo estamos revisando',
+      ignoreTechInGroups: false,
+      mentionReplyMessage: 'No te preocupes, ya enseguida lo solucionamos',
       geminiEnabled: true,
       geminiApiKey: '',
       geminiPrompt: '',
@@ -573,6 +578,19 @@ function initWhatsApp() {
         return;
       }
 
+      // Si está activo el filtro de números técnicos, ignorar mensajes en grupos sin mención si provienen de los teléfonos personales de Facu o Ramiro
+      if (config.ignoreTechInGroups && isGroup && !isMentioned) {
+        const cleanAuthorId = (msg.author || msg.from || '').split('@')[0];
+        const isAuthorTech =
+          cleanAuthorId.includes('1163704522') ||
+          cleanAuthorId.includes('3876117799') ||
+          /\b(facu|facundo|ramiro|rami)\b/i.test(senderName);
+
+        if (isAuthorTech) {
+          return;
+        }
+      }
+
       // 0. Si es mensaje privado, chequear comandos técnicos primero (#ping, #guardia, etc.)
       if (!isGroup) {
         const commandReply = knowledge.processTechCommand(incomingText, fromNumber, botStartTime);
@@ -600,260 +618,308 @@ function initWhatsApp() {
         return;
       }
 
-      const geminiApiKey = config.geminiApiKey || process.env.GEMINI_API_KEY || '';
-      const geminiPrompt = config.geminiPrompt || '';
-      const chatId = msg.from;
-      const targetChat = chat || (await withTimeout(msg.getChat(), 1000, null));
+      // Debounce por chat para agrupar mensajes enviados en ráfaga (ej: "Holis" y 1s después "Buen dia")
+      // Evita disparar 2 respuestas de Gemini en paralelo al mismo chat
+      if (!incomingMessageQueues.has(fromNumber)) {
+        incomingMessageQueues.set(fromNumber, { messages: [], timer: null, inProgress: false });
+      }
+      const chatQueue = incomingMessageQueues.get(fromNumber);
+      chatQueue.messages.push({
+        msg,
+        rawText,
+        displayText,
+        incomingText,
+        senderName,
+        chatTitle,
+        isGroup,
+        isMentioned,
+        incomingLogItem
+      });
 
-      // Activar de inmediato el hilo de conversación continua en este chat (salvo en el grupo Procesos donde se traslada a privado)
-      if (!isMainOpsGroupCheck) {
-        knowledge.startOrRefreshBotConversation(chatId, senderJid);
+      if (chatQueue.timer) {
+        clearTimeout(chatQueue.timer);
       }
 
-      // 1.5. Si estamos en un grupo, detectar si quien nos arrobó fue una SUPERVISORA DE TIENDA o la SUCURSAL directamente
-      let incidentTarget = {
-        isSupervisor: false,
-        targetSenderId: msg.author || msg.from,
-        targetSenderName: senderName,
-        detectedBranch: '',
-        effectiveProblemText: incomingText
-      };
+      // Esperar 2.5s antes de procesar para recibir mensajes seguidos
+      await new Promise((resolve) => {
+        chatQueue.timer = setTimeout(resolve, BATCH_DEBOUNCE_MS);
+      });
 
-      if (isGroup && isMentioned) {
-        let quotedMsgData = null;
-        try {
-          if (msg.hasQuotedMsg) {
-            const quoted = await withTimeout(msg.getQuotedMessage(), 1200, null);
-            if (quoted) {
-              let qSenderName = (quoted._data && quoted._data.notifyName) || '';
-              try {
-                const qContact = await withTimeout(quoted.getContact(), 800, null);
-                if (qContact) qSenderName = qContact.pushname || qContact.name || qSenderName;
-              } catch (_) {}
-              quotedMsgData = {
-                senderId: quoted.author || quoted.from,
-                senderName: qSenderName,
-                text: (quoted.body || '').trim()
-              };
-            }
-          }
-        } catch (_) {}
+      // Si ya hay un procesamiento en curso para este chat o no es el último batch, ceder
+      if (chatQueue.inProgress || chatQueue.messages.length === 0) {
+        return;
+      }
 
-        incidentTarget = knowledge.resolveGroupIncidentTarget({
-          groupChatId: fromNumber,
-          mentionSenderId: msg.author || msg.from,
-          mentionSenderName: senderName,
-          incomingText,
-          quotedMsgData
-        });
+      chatQueue.inProgress = true;
+      const batchedItems = [...chatQueue.messages];
+      chatQueue.messages = [];
 
-        // Si el mensaje fue de una sucursal (no supervisora), también lo dejamos en el buffer del grupo
-        if (!incidentTarget.isSupervisor) {
-          knowledge.recordGroupMessageContext(fromNumber, {
-            senderId: msg.author || msg.from,
-            senderName,
-            text: incomingText
-          });
+      // Combinar los textos de la ráfaga (ej: "Holis\nBuen dia")
+      const combinedIncomingText = batchedItems
+        .map(b => b.incomingText)
+        .filter(Boolean)
+        .join('\n');
+      const latestItem = batchedItems[batchedItems.length - 1];
+      const primaryMsg = latestItem.msg;
+      const primarySenderName = latestItem.senderName;
+      const primaryChatTitle = latestItem.chatTitle;
+      const primaryLogItem = latestItem.incomingLogItem;
+      const anyMentioned = batchedItems.some(b => b.isMentioned);
+
+      try {
+        const geminiApiKey = config.geminiApiKey || process.env.GEMINI_API_KEY || '';
+        const geminiPrompt = config.geminiPrompt || '';
+        const chatId = fromNumber;
+        const targetChat = chat || (await withTimeout(primaryMsg.getChat(), 1000, null));
+
+        // Activar de inmediato el hilo de conversación continua en este chat (salvo en el grupo Procesos donde se traslada a privado)
+        if (!isMainOpsGroupCheck) {
+          knowledge.startOrRefreshBotConversation(chatId, senderJid);
         }
-      }
 
-      // 2. FUNCIÓN DE RESPUESTA CONTINUA CON GEMINI
-      if (config.geminiEnabled !== false) {
-        const continuousRes = await knowledge.getContinuousChatResponse({
-          chatId,
-          incomingText: (isMentioned ? incidentTarget.effectiveProblemText : incomingText) || incomingText,
-          senderName,
-          chatTitle,
-          isGroup,
-          isSupervisor: isMentioned ? incidentTarget.isSupervisor : false,
-          detectedBranchOverride: incidentTarget.detectedBranch,
-          customPrompt: geminiPrompt,
-          customApiKey: geminiApiKey
-        });
+        // 1.5. Si estamos en un grupo, detectar si quien nos arrobó fue una SUPERVISORA DE TIENDA o la SUCURSAL directamente
+        let incidentTarget = {
+          isSupervisor: false,
+          targetSenderId: primaryMsg.author || primaryMsg.from,
+          targetSenderName: primarySenderName,
+          detectedBranch: '',
+          effectiveProblemText: combinedIncomingText
+        };
 
-        if (continuousRes && continuousRes.text) {
-          const bubbles = splitIntoHumanBubbles(continuousRes.text);
-          const sentBubbles = [];
+        if (isGroup && anyMentioned) {
+          let quotedMsgData = null;
+          try {
+            if (primaryMsg.hasQuotedMsg) {
+              const quoted = await withTimeout(primaryMsg.getQuotedMessage(), 1200, null);
+              if (quoted) {
+                let qSenderName = (quoted._data && quoted._data.notifyName) || '';
+                try {
+                  const qContact = await withTimeout(quoted.getContact(), 800, null);
+                  if (qContact) qSenderName = qContact.pushname || qContact.name || qSenderName;
+                } catch (_) {}
+                quotedMsgData = {
+                  senderId: quoted.author || quoted.from,
+                  senderName: qSenderName,
+                  text: (quoted.body || '').trim()
+                };
+              }
+            }
+          } catch (_) {}
 
-          for (let bIdx = 0; bIdx < bubbles.length; bIdx++) {
-            const bubbleText = bubbles[bIdx];
-            const canSend = await simulateHumanReadingAndTyping(targetChat, incomingText, bubbleText, chatId, bIdx === 0);
-            if (!canSend) {
-              console.log(`[Tipeo Cancelado] Un técnico intervino manualmente en ${chatTitle} mientras el bot simulaba escribir.`);
-              return;
+          incidentTarget = knowledge.resolveGroupIncidentTarget({
+            groupChatId: fromNumber,
+            mentionSenderId: primaryMsg.author || primaryMsg.from,
+            mentionSenderName: primarySenderName,
+            incomingText: combinedIncomingText,
+            quotedMsgData
+          });
+
+          // Si el mensaje fue de una sucursal (no supervisora), también lo dejamos en el buffer del grupo
+          if (!incidentTarget.isSupervisor) {
+            knowledge.recordGroupMessageContext(fromNumber, {
+              senderId: primaryMsg.author || primaryMsg.from,
+              senderName: primarySenderName,
+              text: combinedIncomingText
+            });
+          }
+        }
+
+        // 2. FUNCIÓN DE RESPUESTA CONTINUA CON GEMINI
+        if (config.geminiEnabled !== false) {
+          const continuousRes = await knowledge.getContinuousChatResponse({
+            chatId,
+            incomingText: (anyMentioned ? incidentTarget.effectiveProblemText : combinedIncomingText) || combinedIncomingText,
+            senderName: primarySenderName,
+            chatTitle: primaryChatTitle,
+            isGroup,
+            isSupervisor: anyMentioned ? incidentTarget.isSupervisor : false,
+            detectedBranchOverride: incidentTarget.detectedBranch,
+            customPrompt: geminiPrompt,
+            customApiKey: geminiApiKey
+          });
+
+          if (continuousRes && continuousRes.text) {
+            const bubbles = splitIntoHumanBubbles(continuousRes.text);
+            const sentBubbles = [];
+
+            for (let bIdx = 0; bIdx < bubbles.length; bIdx++) {
+              const bubbleText = bubbles[bIdx];
+              const canSend = await simulateHumanReadingAndTyping(targetChat, combinedIncomingText, bubbleText, chatId, bIdx === 0);
+              if (!canSend) {
+                console.log(`[Tipeo Cancelado] Un técnico intervino manualmente en ${primaryChatTitle} mientras el bot simulaba escribir.`);
+                return;
+              }
+
+              // Registrar salida del bot con chatId antes y después de enviar para nunca confundirla con mensaje manual
+              knowledge.registerBotOutput(bubbleText, chatId);
+              knowledge.registerBotOutput(continuousRes.text, chatId);
+
+              if (isGroup && bIdx === 0) {
+                await primaryMsg.reply(bubbleText);
+              } else {
+                if (targetChat && typeof targetChat.sendMessage === 'function') {
+                  await targetChat.sendMessage(bubbleText);
+                } else {
+                  await client.sendMessage(chatId, bubbleText);
+                }
+              }
+
+              knowledge.registerBotOutput(bubbleText, chatId);
+              sentBubbles.push(bubbleText);
+              updateActivityItem(primaryLogItem.id, { response: sentBubbles.join('\n'), responder: 'bot' });
             }
 
-            // Registrar salida del bot con chatId antes y después de enviar para nunca confundirla con mensaje manual
-            knowledge.registerBotOutput(bubbleText, chatId);
-            knowledge.registerBotOutput(continuousRes.text, chatId);
+            console.log(`[Gemini Continuo] Respondido a ${primaryChatTitle} (${primarySenderName}): "${continuousRes.text}"`);
 
-            if (isGroup && bIdx === 0) {
-              await msg.reply(bubbleText);
+            const isMainOpsGroup = isGroup && knowledge.isMainOperationsGroup(primaryChatTitle);
+            if (!isMainOpsGroup) {
+              // Refrescar el hilo activo de conversación continua tras terminar de enviar
+              knowledge.startOrRefreshBotConversation(chatId, primaryMsg.author || primaryMsg.from);
+
+              // Si el caso reportado es que NO les aparece una promoción en el sistema,
+              // a los pocos segundos enviamos automáticamente el segundo aviso indicando que ya mandamos la actualización y que recarguen con F5
+              if (knowledge.isPromoVisibilityIssue(combinedIncomingText, continuousRes.text)) {
+                const promoFollowUpMsg = 'Listo, ahí ya mandamos la actualización al sistema, prueben recargar con F5 y fijate que ya les tiene que aparecer la promo';
+                setTimeout(async () => {
+                  try {
+                    if (knowledge.isChatUnderHumanControl(chatId)) return;
+                    const canFollowUp = await simulateHumanReadingAndTyping(targetChat, '', promoFollowUpMsg, chatId, false);
+                    if (!canFollowUp || knowledge.isChatUnderHumanControl(chatId)) return;
+
+                    knowledge.registerBotOutput(promoFollowUpMsg, chatId);
+                    if (targetChat && typeof targetChat.sendMessage === 'function') {
+                      await targetChat.sendMessage(promoFollowUpMsg);
+                    } else {
+                      await client.sendMessage(chatId, promoFollowUpMsg);
+                    }
+                    knowledge.registerBotOutput(promoFollowUpMsg, chatId);
+                    knowledge.addToChatHistory(chatId, 'model', promoFollowUpMsg);
+                    knowledge.startOrRefreshBotConversation(chatId, primaryMsg.author || primaryMsg.from);
+                    sentBubbles.push(promoFollowUpMsg);
+                    updateActivityItem(primaryLogItem.id, { response: sentBubbles.join('\n'), responder: 'bot' });
+                    console.log(`[Promo Auto-Update F5] Aviso de F5 enviado en ${primaryChatTitle}: "${promoFollowUpMsg}"`);
+                  } catch (promoErr) {
+                    console.error('[Error en seguimiento automático de Promo F5]:', promoErr.message);
+                  }
+                }, 9500);
+              }
+            }
+
+            // Si fue en el grupo principal de Operaciones / Procesos ("Procesos - Mi Gusto"),
+            // abrirle conversación por privado a la SUCURSAL (NUNCA a la supervisora si nos arrobó una supervisora)
+            try {
+              if (isMainOpsGroup) {
+                let targetBranchJid = incidentTarget.targetSenderId;
+                let targetBranchLabel = incidentTarget.targetSenderName || primarySenderName;
+
+                if (incidentTarget.isSupervisor && !targetBranchJid && incidentTarget.detectedBranch && incidentTarget.detectedBranch !== 'No especificada') {
+                  try {
+                    const allChats = await client.getChats();
+                    const normBr = incidentTarget.detectedBranch.toLowerCase();
+                    const foundBranchChat = allChats.find(
+                      c => !c.isGroup && c.name && c.name.toLowerCase().includes(normBr)
+                    );
+                    if (foundBranchChat && foundBranchChat.id && foundBranchChat.id._serialized) {
+                      targetBranchJid = foundBranchChat.id._serialized;
+                      targetBranchLabel = foundBranchChat.name;
+                    }
+                  } catch (_) {}
+                }
+
+                if (targetBranchJid) {
+                  const cleanTargetId = targetBranchJid.split('@')[0];
+                  const techPhones = [
+                    knowledge.TECNICOS.ramiro.phone,
+                    knowledge.TECNICOS.facu.phone,
+                    '3876117799',
+                    '1163704522'
+                  ];
+                  const isTargetTech = techPhones.some(t => cleanTargetId.includes(t) || t.includes(cleanTargetId)) ||
+                    targetBranchLabel.toLowerCase().includes('facu') || targetBranchLabel.toLowerCase().includes('rami');
+
+                  if (!isTargetTech) {
+                    knowledge.clearHumanTakeover(targetBranchJid);
+                    knowledge.startOrRefreshBotConversation(targetBranchJid, targetBranchJid);
+                    const privGreeting = incidentTarget.isSupervisor
+                      ? `Buenas, como va? Les escribimos de Sistemas por lo que reportaron en el grupo de Procesos así no llenamos de mensajes allá, contanos bien qué pasó o pasanos foto/captura y lo vemos`
+                      : `Buenas ${targetBranchLabel}, te escribo por acá por lo que comentaste en el grupo así no llenamos de mensajes allá, contame bien qué pasó o pasame foto/captura y lo vemos`;
+
+                    const privChat = await client.getChatById(targetBranchJid).catch(() => null);
+                    const canSendPriv = await simulateHumanReadingAndTyping(privChat, '', privGreeting, targetBranchJid);
+                    if (canSendPriv) {
+                      knowledge.registerBotOutput(privGreeting);
+                      await client.sendMessage(targetBranchJid, privGreeting);
+                      knowledge.addToChatHistory(targetBranchJid, 'user', `[Contexto del grupo ${primaryChatTitle}]: ${incidentTarget.effectiveProblemText}`);
+                      knowledge.addToChatHistory(targetBranchJid, 'model', privGreeting);
+                      logActivity('outgoing', `Bot ➔ ${targetBranchLabel} (Privado)`, `Derivado desde ${primaryChatTitle}`, privGreeting, true, { chatId: targetBranchJid });
+                      console.log(`[Privado desde Grupo Principal] Iniciado chat privado con sucursal ${targetBranchLabel} (${targetBranchJid}) [Arrobó supervisora: ${incidentTarget.isSupervisor}]`);
+                    }
+                  }
+                } else if (incidentTarget.isSupervisor) {
+                  console.log(`[Privado desde Grupo Principal] Arrobó supervisora (${primarySenderName}), se evitó hablarle por privado a ella (sucursal aún no escribió en el grupo).`);
+                }
+              }
+            } catch (privErr) {
+              console.error('[Error iniciando privado desde Procesos]:', privErr.message);
+            }
+
+            // Alerta al técnico de guardia si corresponde por horario
+            try {
+              if (knowledge.shouldAlertTech()) {
+                const activeTechs = knowledge.getActiveTechNumbers();
+                const branchName = continuousRes.detectedBranch || 'No especificada';
+                const alertMsg = `🚨 *Alerta Guardia Sistemas*\n\n` +
+                  `*Chat:* ${primaryChatTitle}\n` +
+                  `*De:* ${primarySenderName}\n` +
+                  `*Sucursal:* ${branchName}\n` +
+                  `*Mensaje:* "${combinedIncomingText}"`;
+
+                const isWeekend = (new Date().getDay() === 0 || new Date().getDay() === 6);
+                knowledge.recordWeeklyAlert(branchName, isWeekend);
+
+                for (const techPhone of activeTechs) {
+                  const techJid = `${techPhone}@c.us`;
+                  knowledge.registerBotOutput(alertMsg);
+                  await client.sendMessage(techJid, alertMsg);
+                  console.log(`[Alerta Técnico] Enviada a ${techPhone}`);
+                }
+              }
+            } catch (techErr) {
+              console.error('[Error enviando alerta al técnico]:', techErr.message);
+            }
+
+            return;
+          }
+        }
+
+        // Fallback si Gemini no estuviera disponible: flujo tradicional de guardia
+        if (anyMentioned || (config.onlyOnMention && isGroup)) {
+          const responsePlan = await knowledge.getGuardiaMentionResponse({ 
+            incomingText: combinedIncomingText, 
+            chatTitle: primaryChatTitle,
+            customPrompt: geminiPrompt,
+            customApiKey: geminiApiKey
+          });
+
+          for (let i = 0; i < responsePlan.messages.length; i++) {
+            const step = responsePlan.messages[i];
+            await sleep(step.delayBefore || 1500);
+            knowledge.registerBotOutput(step.text);
+            if (step.isReply) {
+              await primaryMsg.reply(step.text);
             } else {
               if (targetChat && typeof targetChat.sendMessage === 'function') {
-                await targetChat.sendMessage(bubbleText);
+                await targetChat.sendMessage(step.text);
               } else {
-                await client.sendMessage(chatId, bubbleText);
+                await client.sendMessage(chatId, step.text);
               }
             }
-
-            knowledge.registerBotOutput(bubbleText, chatId);
-            sentBubbles.push(bubbleText);
-            updateActivityItem(incomingLogItem.id, { response: sentBubbles.join('\n'), responder: 'bot' });
           }
-
-          console.log(`[Gemini Continuo] Respondido a ${chatTitle} (${senderName}): "${continuousRes.text}"`);
-
-          const isMainOpsGroup = isGroup && knowledge.isMainOperationsGroup(chatTitle);
-          if (!isMainOpsGroup) {
-            // Refrescar el hilo activo de conversación continua tras terminar de enviar
-            knowledge.startOrRefreshBotConversation(chatId, msg.author || msg.from);
-
-            // Si el caso reportado es que NO les aparece una promoción en el sistema,
-            // a los pocos segundos enviamos automáticamente el segundo aviso indicando que ya mandamos la actualización y que recarguen con F5
-            if (knowledge.isPromoVisibilityIssue(incomingText, continuousRes.text)) {
-              const promoFollowUpMsg = 'Listo, ahí ya mandamos la actualización al sistema, prueben recargar con F5 y fijate que ya les tiene que aparecer la promo';
-              setTimeout(async () => {
-                try {
-                  if (knowledge.isChatUnderHumanControl(chatId)) return;
-                  const canFollowUp = await simulateHumanReadingAndTyping(targetChat, '', promoFollowUpMsg, chatId, false);
-                  if (!canFollowUp || knowledge.isChatUnderHumanControl(chatId)) return;
-
-                  knowledge.registerBotOutput(promoFollowUpMsg, chatId);
-                  if (targetChat && typeof targetChat.sendMessage === 'function') {
-                    await targetChat.sendMessage(promoFollowUpMsg);
-                  } else {
-                    await client.sendMessage(chatId, promoFollowUpMsg);
-                  }
-                  knowledge.registerBotOutput(promoFollowUpMsg, chatId);
-                  knowledge.addToChatHistory(chatId, 'model', promoFollowUpMsg);
-                  knowledge.startOrRefreshBotConversation(chatId, msg.author || msg.from);
-                  sentBubbles.push(promoFollowUpMsg);
-                  updateActivityItem(incomingLogItem.id, { response: sentBubbles.join('\n'), responder: 'bot' });
-                  console.log(`[Promo Auto-Update F5] Aviso de F5 enviado en ${chatTitle}: "${promoFollowUpMsg}"`);
-                } catch (promoErr) {
-                  console.error('[Error en seguimiento automático de Promo F5]:', promoErr.message);
-                }
-              }, 9500);
-            }
-          }
-
-          // Si fue en el grupo principal de Operaciones / Procesos ("Procesos - Mi Gusto"),
-          // abrirle conversación por privado a la SUCURSAL (NUNCA a la supervisora si nos arrobó una supervisora)
-          try {
-            if (isMainOpsGroup) {
-              let targetBranchJid = incidentTarget.targetSenderId;
-              let targetBranchLabel = incidentTarget.targetSenderName || senderName;
-
-              // Si arrobó una supervisora y la sucursal no había escrito antes en el grupo (targetBranchJid === null),
-              // buscamos entre los chats de WhatsApp el contacto privado de esa sucursal por nombre
-              if (incidentTarget.isSupervisor && !targetBranchJid && incidentTarget.detectedBranch && incidentTarget.detectedBranch !== 'No especificada') {
-                try {
-                  const allChats = await client.getChats();
-                  const normBr = incidentTarget.detectedBranch.toLowerCase();
-                  const foundBranchChat = allChats.find(
-                    c => !c.isGroup && c.name && c.name.toLowerCase().includes(normBr)
-                  );
-                  if (foundBranchChat && foundBranchChat.id && foundBranchChat.id._serialized) {
-                    targetBranchJid = foundBranchChat.id._serialized;
-                    targetBranchLabel = foundBranchChat.name;
-                  }
-                } catch (_) {}
-              }
-
-              if (targetBranchJid) {
-                const cleanTargetId = targetBranchJid.split('@')[0];
-                const techPhones = [
-                  knowledge.TECNICOS.ramiro.phone,
-                  knowledge.TECNICOS.facu.phone,
-                  '3876117799',
-                  '1163704522'
-                ];
-                const isTargetTech = techPhones.some(t => cleanTargetId.includes(t) || t.includes(cleanTargetId)) ||
-                  targetBranchLabel.toLowerCase().includes('facu') || targetBranchLabel.toLowerCase().includes('rami');
-
-                if (!isTargetTech) {
-                  // Asegurar que el bot esté activo en el chat privado de la sucursal para mantener la charla continua
-                  knowledge.clearHumanTakeover(targetBranchJid);
-                  knowledge.startOrRefreshBotConversation(targetBranchJid, targetBranchJid);
-                  const privGreeting = incidentTarget.isSupervisor
-                    ? `Buenas, como va? Les escribimos de Sistemas por lo que reportaron en el grupo de Procesos así no llenamos de mensajes allá, contanos bien qué pasó o pasanos foto/captura y lo vemos`
-                    : `Buenas ${targetBranchLabel}, te escribo por acá por lo que comentaste en el grupo así no llenamos de mensajes allá, contame bien qué pasó o pasame foto/captura y lo vemos`;
-
-                  const privChat = await client.getChatById(targetBranchJid).catch(() => null);
-                  const canSendPriv = await simulateHumanReadingAndTyping(privChat, '', privGreeting, targetBranchJid);
-                  if (canSendPriv) {
-                    knowledge.registerBotOutput(privGreeting);
-                    await client.sendMessage(targetBranchJid, privGreeting);
-                    knowledge.addToChatHistory(targetBranchJid, 'user', `[Contexto del grupo ${chatTitle}]: ${incidentTarget.effectiveProblemText}`);
-                    knowledge.addToChatHistory(targetBranchJid, 'model', privGreeting);
-                    logActivity('outgoing', `Bot ➔ ${targetBranchLabel} (Privado)`, `Derivado desde ${chatTitle}`, privGreeting, true, { chatId: targetBranchJid });
-                    console.log(`[Privado desde Grupo Principal] Iniciado chat privado con sucursal ${targetBranchLabel} (${targetBranchJid}) [Arrobó supervisora: ${incidentTarget.isSupervisor}]`);
-                  }
-                }
-              } else if (incidentTarget.isSupervisor) {
-                console.log(`[Privado desde Grupo Principal] Arrobó supervisora (${senderName}), se evitó hablarle por privado a ella (sucursal aún no escribió en el grupo).`);
-              }
-            }
-          } catch (privErr) {
-            console.error('[Error iniciando privado desde Procesos]:', privErr.message);
-          }
-
-
-          // Alerta al técnico de guardia si corresponde por horario
-          try {
-            if (knowledge.shouldAlertTech()) {
-              const activeTechs = knowledge.getActiveTechNumbers();
-              const branchName = continuousRes.detectedBranch || 'No especificada';
-              const alertMsg = `🚨 *Alerta Guardia Sistemas*\n\n` +
-                `*Chat:* ${chatTitle}\n` +
-                `*De:* ${senderName}\n` +
-                `*Sucursal:* ${branchName}\n` +
-                `*Mensaje:* "${incomingText}"`;
-
-              const isWeekend = (new Date().getDay() === 0 || new Date().getDay() === 6);
-              knowledge.recordWeeklyAlert(branchName, isWeekend);
-
-              for (const techPhone of activeTechs) {
-                const techJid = `${techPhone}@c.us`;
-                knowledge.registerBotOutput(alertMsg);
-                await client.sendMessage(techJid, alertMsg);
-                console.log(`[Alerta Técnico] Enviada a ${techPhone}`);
-              }
-            }
-          } catch (techErr) {
-            console.error('[Error enviando alerta al técnico]:', techErr.message);
-          }
-
+          updateActivityItem(primaryLogItem.id, { response: responsePlan.summaryText, responder: 'bot' });
           return;
         }
-      }
-
-      // Fallback si Gemini no estuviera disponible: flujo tradicional de guardia
-      if (isMentioned || (config.onlyOnMention && isGroup)) {
-        const responsePlan = await knowledge.getGuardiaMentionResponse({ 
-          incomingText, 
-          chatTitle,
-          customPrompt: geminiPrompt,
-          customApiKey: geminiApiKey
-        });
-
-        for (let i = 0; i < responsePlan.messages.length; i++) {
-          const step = responsePlan.messages[i];
-          await sleep(step.delayBefore || 1500);
-          knowledge.registerBotOutput(step.text);
-          if (step.isReply) {
-            await msg.reply(step.text);
-          } else {
-            if (targetChat && typeof targetChat.sendMessage === 'function') {
-              await targetChat.sendMessage(step.text);
-            } else {
-              await client.sendMessage(chatId, step.text);
-            }
-          }
-        }
-        updateActivityItem(incomingLogItem.id, { response: responsePlan.summaryText, responder: 'bot' });
-        return;
+      } finally {
+        chatQueue.inProgress = false;
       }
 
     } catch (globalErr) {

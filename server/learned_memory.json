@@ -1,5 +1,20 @@
 {
   "stylePhrases": [
+    "Ahi mandamos una actualizacion, avisale que recarguen datalive o el sistema de ventas para que les aparezcan disponibles para cargar stock",
+    "Nono, estabamos chequeando porque a nosotros si nos sale en sistema de ventas",
+    "Jaja te saludamos los 3",
+    "Buenas sele que tal",
+    "A ver, probemos una cosa, intentá desconectar de la corriente al tvbox afectado, esperar 5 segundo y volver a conectarlo, asi le forzamo el reinicio porque quiza quedó bloqueado en la pantalla principal",
+    "Es la unica TV que no reacciona al control?",
+    "Cuando tocas botone del control apuntando a la TV, el TVBox parpadea?",
+    "Que no te estaria dejando hacer la tele?",
+    "Buenas tardes eve!\nTodo bien?",
+    "Seria excelente poder incorporar una de ese tipo samu",
+    "Cuando viniste, pudiste hacer el analisis de la impresora de calidad para evaluar si es posible hacer un cambio a una impresora mass grande o con mayor capacidad de impresion para el sector?\nYa que calidad es el area con mayor volumen de impreiones",
+    "Genial buenisimo",
+    "De casualidad tenemos idea de mas o menos a que hora pasa la moto a dejar los toners?",
+    "ElRubius",
+    "Hola soy gus",
     "Consulta, ayer que toners cambiaste, solo el de calidad?",
     "Hola samu buen dia",
     "Avisanos cualquier cosa",
@@ -11,6 +26,54 @@
     "Pasanos un screenshot del error que te aparece para analizarlo"
   ],
   "qaPairs": [
+    {
+      "question": "Ahora no me dan bola",
+      "humanAnswer": "Ahi mandamos una actualizacion, avisale que recarguen datalive o el sistema de ventas para que les aparezcan disponibles para cargar stock",
+      "learnedBy": "Guardia Manual",
+      "timestamp": "2026-11-05T18:57:39.180Z"
+    },
+    {
+      "question": "Todo bien por aca",
+      "humanAnswer": "Buenas sele que tal\nJaja te saludamos los 3",
+      "learnedBy": "Guardia Manual",
+      "timestamp": "2026-11-05T18:26:39.045Z"
+    },
+    {
+      "question": "Las otras están ok",
+      "humanAnswer": "A ver, probemos una cosa, intentá desconectar de la corriente al tvbox afectado, esperar 5 segundo y volver a conectarlo, asi le forzamo el reinicio porque quiza quedó bloqueado en la pantalla principal",
+      "learnedBy": "Guardia Manual",
+      "timestamp": "2026-11-05T17:46:37.383Z"
+    },
+    {
+      "question": "le cambie las pilas y lo cambie de control pero sigue igual }",
+      "humanAnswer": "Cuando tocas botone del control apuntando a la TV, el TVBox parpadea?\nEs la unica TV que no reacciona al control?",
+      "learnedBy": "Guardia Manual",
+      "timestamp": "2026-11-05T17:33:12.583Z"
+    },
+    {
+      "question": "Una de 40 paginas por minuto con toner mas graande y 2 vandejas de papel",
+      "humanAnswer": "Seria excelente poder incorporar una de ese tipo samu",
+      "learnedBy": "Guardia Manual",
+      "timestamp": "2026-11-05T16:57:01.038Z"
+    },
+    {
+      "question": "Lleva Brother de las multi\nBrother de la chica \nLos colores \nDe la HP M12 de calidad",
+      "humanAnswer": "Cuando viniste, pudiste hacer el analisis de la impresora de calidad para evaluar si es posible hacer un cambio a una impresora mass grande o con mayor capacidad de impresion para el sector?\nYa que calidad es el area con mayor volumen de impreiones",
+      "learnedBy": "Guardia Manual",
+      "timestamp": "2026-11-05T16:49:27.744Z"
+    },
+    {
+      "question": "Si el de calidad, hoy pasa la moto con los toners de stock",
+      "humanAnswer": "De casualidad tenemos idea de mas o menos a que hora pasa la moto a dejar los toners?",
+      "learnedBy": "Guardia Manual",
+      "timestamp": "2026-11-05T16:44:49.973Z"
+    },
+    {
+      "question": "Que modelo de impresora tiene ella? Brother?",
+      "humanAnswer": "Hola soy gus\nElRubius",
+      "learnedBy": "Guardia Manual",
+      "timestamp": "2026-11-05T15:41:14.255Z"
+    },
     {
       "question": "graciasssss",
       "humanAnswer": "A vos Mari\nAvisanos cualquier cosa",

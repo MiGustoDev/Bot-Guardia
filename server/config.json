@@ -1,6 +1,7 @@
 {
   "botEnabled": true,
   "onlyOnMention": true,
+  "ignoreTechInGroups": false,
   "mentionReplyMessage": "No te preocupes, ya enseguida lo solucionamos",
   "geminiEnabled": true,
   "geminiApiKey": "",

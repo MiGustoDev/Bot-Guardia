@@ -658,10 +658,15 @@ MANUAL OPERATIVO DE RESOLUCION TECNICA DE MI GUSTO (SEGUIR AL PIE DE LA LETRA):
      * Si nos arroba una SUPERVISORA DE TIENDA (Damaris, Lidya, Selene, Martín Sastre, Elizabeth Colman o Evelyn Cedrón, avisando por una sucursal o citando el reclamo de una tienda): respondé dejando asentado que tomamos el caso y que ya nos comunicamos por privado DIRECTAMENTE CON LA SUCURSAL para resolverlo (ej: 'Buenas, ahi tomamos el caso y ya le escribimos por privado a la sucursal para solucionarlo')
    - CUALQUIER OTRO GRUPO (que no sea Operaciones/Procesos): respondé SIEMPRE dejando asentado que se toma el caso y que ya lo estamos viendo/revisando con tono humilde y servicial. Ejemplo: 'Buenas, ahi tomamos el caso, no te preocupes que ya enseguida lo solucionamos'
    - CHAT PRIVADO (1 a 1): mantené una conversación continua, acertada, humilde y super servicial. Guiá paso a paso diciendo 'probá...', 'intentemos...', 'prueben...' y pedí screenshot/foto del error cuando sea de comanderas, pantallas o sistema de ventas hasta que el técnico de guardia tome el celular y continúe manualmente
-15. TRATO ESPECIAL DE AMIGOS CON MARIA SALAZAR ('MARI') Y ALEXANDRA RAMIREZ ('ALE'):
-   - Si quien nos escribe es María Salazar (Maria Salazar) o Alexandra Ramírez (Alexandra Ramirez), ellas son amigas de confianza y NO se les habla como a un usuario común
-   - A María Salazar llamala siempre 'Mari' y hablale en tono bien de amigos (ej: 'Dale Mari, no te preocupes, enseguida lo hacemos', 'Buenas Mari, ya lo vemos y te aviso')
-   - A Alexandra Ramírez llamala siempre 'Ale' y hablale en tono bien de amigos (ej: 'Dale Ale, ya lo vemos y te aviso', 'Dale Ale, no te preocupes, enseguida lo hacemos')
+15. TRATO ESPECIAL DE AMIGOS Y CONFIANZA (SELENE, MARIA SALAZAR Y ALEXANDRA RAMIREZ):
+   - Selene ('Sele'), María Salazar ('Mari') y Alexandra Ramírez ('Ale') son personas de mucha confianza y NO se les habla como a un usuario formal ni con respuestas extensas o robóticas.
+   - Con ellas respondé SIEMPRE súper corto, natural, buena onda y relajado:
+     * A Selene llamala siempre 'Sele':
+       - Si solo saluda: 'Hola Sele, como estas?' o 'Hola Sele! como estas?'
+       - Si reporta algo o consulta: 'Hola Sele! como estas? Dale gracias por levantar el tema, ya lo analizamos' o 'Hola Sele, como estas? No te preocupes ya analizamos lo que nos reportas'
+       - Respuestas directas, cortas y al pie, CERO tono de call center o servicial en exceso.
+     * A María Salazar llamala siempre 'Mari' y hablale en tono bien de amigos (ej: 'Dale Mari, no te preocupes, enseguida lo hacemos', 'Buenas Mari, ya lo vemos y te aviso')
+     * A Alexandra Ramírez llamala siempre 'Ale' y hablale en tono bien de amigos (ej: 'Dale Ale, ya lo vemos y te aviso', 'Dale Ale, no te preocupes, enseguida lo hacemos')
 `;
 
 async function getGeminiAcknowledgement(incomingText = '', branchName = '', customPrompt = '', customApiKey = '') {
@@ -1129,12 +1134,15 @@ function resolveGroupIncidentTarget({
 }
 
 /**
- * Detecta si el contacto que escribe es María Salazar ("Mari") o Alexandra Ramírez ("Ale")
- * para activar automáticamente el trato cercano de amigos.
+ * Detecta si el contacto que escribe es Selene/Selenne ("Sele"), María Salazar ("Mari") o Alexandra Ramírez ("Ale")
+ * para activar automáticamente el trato cercano de amigos y confianza.
  */
 function detectCloseFriend(senderName = '') {
   const norm = normalizeText(senderName);
   if (!norm) return null;
+  if (norm.includes('selene') || norm.includes('selenne') || /\bsele\b/.test(norm)) {
+    return { isFriend: true, nickname: 'Sele', fullName: 'Selene' };
+  }
   if (norm.includes('maria salazar') || norm.includes('mari salazar') || /\bsalazar\b/.test(norm)) {
     return { isFriend: true, nickname: 'Mari', fullName: 'María Salazar' };
   }
@@ -1174,9 +1182,14 @@ async function getContinuousChatResponse({
     const isMainOps = isGroup && isMainOperationsGroup(chatTitle);
     const isFollowUpTurn = history.length > 0;
     const friendInfo = detectCloseFriend(senderName);
-    const friendNote = friendInfo
-      ? ` (NOTA ESPECIAL DE AMIGOS: Quien te escribe es ${friendInfo.fullName}, que es amiga de mucha confianza. Respondé SIEMPRE en tono bien de amigos, llamándola "${friendInfo.nickname}", usando expresiones como "Dale ${friendInfo.nickname}, ya lo vemos y te aviso" o "Dale ${friendInfo.nickname}, no te preocupes, enseguida lo hacemos")`
-      : '';
+    let friendNote = '';
+    if (friendInfo) {
+      if (friendInfo.nickname === 'Sele') {
+        friendNote = ` (NOTA ESPECIAL: Quien te escribe es Selene (${senderName}), supervisora y amiga de confianza. Trato: súper natural, corto y relajado de amigos, llamándola 'Sele'. Si solo saluda: 'Hola Sele, como estas?'. Si reporta un problema o duda: 'Hola Sele! como estas? Dale gracias por levantar el tema, ya lo analizamos' o 'Hola Sele, como estas? No te preocupes ya analizamos lo que nos reportas'. NUNCA seas formal, ni extenso, ni digas 'en qué te puedo dar una mano hoy' ni 'en qué te puedo ayudar hoy')`;
+      } else {
+        friendNote = ` (NOTA ESPECIAL DE AMIGOS: Quien te escribe es ${friendInfo.fullName}, que es amiga de mucha confianza. Respondé SIEMPRE en tono bien de amigos, llamándola "${friendInfo.nickname}", usando expresiones como "Dale ${friendInfo.nickname}, ya lo vemos y te aviso" o "Dale ${friendInfo.nickname}, no te preocupes, enseguida lo hacemos")`;
+      }
+    }
 
     let groupInstruction = '';
     if (isMainOps) {

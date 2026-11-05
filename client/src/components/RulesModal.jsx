@@ -60,7 +60,8 @@ export default function RulesModal({ isOpen, onClose }) {
   const [config, setConfig] = useState({
     botEnabled: true,
     onlyOnMention: true,
-    mentionReplyMessage: 'No te preocupes, ya lo estamos revisando',
+    ignoreTechInGroups: false,
+    mentionReplyMessage: 'No te preocupes, ya enseguida lo solucionamos',
     geminiEnabled: false,
     geminiApiKey: '',
     geminiPrompt: '',
@@ -799,6 +800,69 @@ export default function RulesModal({ isOpen, onClose }) {
                     top: '2px',
                     left: '2px',
                     transform: config.onlyOnMention ? 'translateX(16px)' : 'translateX(0px)',
+                    transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+                    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.35)'
+                  }} />
+                </div>
+              </div>
+
+              {/* Toggle Ignore Tech in Groups (Filtro de números técnicos) */}
+              <div style={{
+                backgroundColor: 'var(--wa-surface-subtle)',
+                border: '1px solid var(--wa-border-subtle)',
+                borderLeft: '3px solid ' + (config.ignoreTechInGroups ? 'var(--wa-status-warning)' : 'var(--wa-teal)'),
+                borderRadius: '12px',
+                padding: '16px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between'
+              }}>
+                <div style={{ paddingRight: '16px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <h4 style={{ fontSize: '14px', fontWeight: '700', color: 'var(--wa-text-primary)' }}>
+                      Filtro de Números Técnicos en Grupos
+                    </h4>
+                    <span style={{
+                      fontSize: '10px',
+                      fontWeight: '700',
+                      textTransform: 'uppercase',
+                      padding: '2px 8px',
+                      borderRadius: '4px',
+                      backgroundColor: config.ignoreTechInGroups ? 'rgba(234, 179, 8, 0.15)' : 'rgba(37, 211, 102, 0.15)',
+                      color: config.ignoreTechInGroups ? 'var(--wa-status-warning)' : 'var(--wa-green)'
+                    }}>
+                      {config.ignoreTechInGroups ? 'Filtro Activado' : 'Modo Pruebas (Desactivado)'}
+                    </span>
+                  </div>
+                  <p style={{ fontSize: '12px', color: 'var(--wa-text-secondary)', marginTop: '4px', lineHeight: '1.4' }}>
+                    Si está <strong>activado</strong>, el bot ignora los mensajes sin @Sistemas que vengan de los números personales de Facu (1163704522) y Ramiro (3876117799) asumiendo que están contestándole a una tienda. Si está <strong>desactivado</strong>, pueden testear libremente el hilo continuo en grupos sin arrobar.
+                  </p>
+                </div>
+
+                {/* Modern Switch */}
+                <div
+                  onClick={() => setConfig({ ...config, ignoreTechInGroups: !config.ignoreTechInGroups })}
+                  style={{
+                    width: '36px',
+                    height: '20px',
+                    borderRadius: '12px',
+                    backgroundColor: config.ignoreTechInGroups ? 'var(--wa-status-warning)' : 'rgba(255, 255, 255, 0.12)',
+                    position: 'relative',
+                    cursor: 'pointer',
+                    flexShrink: 0,
+                    transition: 'background-color 0.25s ease'
+                  }}
+                  title={config.ignoreTechInGroups ? 'Desactivar filtro para poder probar' : 'Activar filtro para producción'}
+                >
+                  <div style={{
+                    width: '16px',
+                    height: '16px',
+                    borderRadius: '50%',
+                    backgroundColor: '#ffffff',
+                    position: 'absolute',
+                    top: '2px',
+                    left: '2px',
+                    transform: config.ignoreTechInGroups ? 'translateX(16px)' : 'translateX(0px)',
                     transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
                     boxShadow: '0 1px 3px rgba(0, 0, 0, 0.35)'
                   }} />
