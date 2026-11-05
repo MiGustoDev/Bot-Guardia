@@ -411,6 +411,18 @@ function processTechCommand(text = '', senderPhone = '', botStartTime = Date.now
     return `🧹 *Caché de Chromium depurada con éxito!*\nRAM actual: ${(mem.rss / 1024 / 1024).toFixed(1)} MB.`;
   }
 
+  // 4.5. #aprendido o #memoria
+  if (clean === '#aprendido' || clean === '#memoria') {
+    const mem = readLearnedMemory();
+    const totalQA = mem.qaPairs?.length || 0;
+    const totalPhrases = mem.stylePhrases?.length || 0;
+    const lastExamples = (mem.qaPairs || []).slice(0, 3).map(p => `• "${p.question}" ➔ "${p.humanAnswer}"`).join('\n');
+    return `🧠 *Memoria de Auto-Entrenamiento*\n\n` +
+      `• *Casos reales aprendidos:* ${totalQA}\n` +
+      `• *Expresiones propias capturadas:* ${totalPhrases}\n\n` +
+      (lastExamples ? `*Últimas respuestas aprendidas de ustedes:*\n${lastExamples}` : `Todavía esperando respuestas manuales para aprender.`);
+  }
+
   // 5. #ayuda o #comandos
   if (clean === '#ayuda' || clean === '#comandos') {
     return `🛠️ *Comandos de Sistemas Disponibles:*\n\n` +
@@ -631,9 +643,11 @@ async function getGeminiAcknowledgement(incomingText = '', branchName = '', cust
   try {
     const { GoogleGenerativeAI } = require('@google/generative-ai');
     const ai = new GoogleGenerativeAI(apiKey);
-    const systemInstruction = customPrompt && customPrompt.trim().length > 20 
+    const learnedBlock = buildLearnedContextPrompt(incomingText);
+    const baseSys = customPrompt && customPrompt.trim().length > 20 
       ? `${customPrompt}\n\nIMPORTANTE: NUNCA uses signos de apertura (¡ o ¿) ni puntos finales. Sé conciso (1-2 oraciones cortas)`
       : GEMINI_SYSTEM_INSTRUCTION;
+    const systemInstruction = baseSys + learnedBlock;
 
     const promptContext = branchName && branchName !== 'No especificada'
       ? `Sucursal identificada: ${branchName}`
@@ -703,37 +717,108 @@ async function getGuardiaMentionResponse(context = {}) {
 }
 
 
-// Historial de conversación continuo por chatId
-const chatMemory = new Map();
+// ==========================================
+// 8.5. CLIENTE GEMINI SINGLETON, BALANCEADOR INTELIGENTE Y MEMORIA LRU
+// ==========================================
+const chatMemory = new Map(); // chatId -> { messages: [], lastUsed: number }
+const MAX_CHAT_SESSIONS = 150;
+let cachedGenAIInstance = null;
+let cachedApiKey = null;
+
+// Salud dinámica de modelos para evitar demoras de 503
+const modelHealth = new Map([
+  ['gemini-3.5-flash', { cooldownUntil: 0 }],
+  ['gemini-3.5-flash-lite', { cooldownUntil: 0 }],
+  ['gemini-3.1-flash-lite', { cooldownUntil: 0 }]
+]);
+
+function getGenAIClient(apiKey) {
+  if (!apiKey) return null;
+  if (cachedGenAIInstance && cachedApiKey === apiKey) {
+    return cachedGenAIInstance;
+  }
+  const { GoogleGenerativeAI } = require('@google/generative-ai');
+  cachedGenAIInstance = new GoogleGenerativeAI(apiKey);
+  cachedApiKey = apiKey;
+  return cachedGenAIInstance;
+}
+
+function getOrderedCandidateModels() {
+  const now = Date.now();
+  const all = ['gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite'];
+  // Primero los modelos que no están en penalización por 503/timeout
+  const healthy = all.filter(m => (modelHealth.get(m)?.cooldownUntil || 0) <= now);
+  const cooling = all.filter(m => (modelHealth.get(m)?.cooldownUntil || 0) > now);
+  return [...healthy, ...cooling];
+}
+
+function markModelFailure(modelName) {
+  // Penalizar por 2 minutos si dio 503 o timeout para que las siguientes consultas vayan directo al modelo rápido
+  modelHealth.set(modelName, { cooldownUntil: Date.now() + 2 * 60 * 1000 });
+}
+
+function markModelSuccess(modelName) {
+  modelHealth.set(modelName, { cooldownUntil: 0 });
+}
 
 function getChatHistory(chatId) {
   if (!chatMemory.has(chatId)) {
-    chatMemory.set(chatId, []);
+    // Limpieza LRU si supera el máximo de sesiones en RAM
+    if (chatMemory.size >= MAX_CHAT_SESSIONS) {
+      let oldestKey = null;
+      let oldestTime = Infinity;
+      for (const [k, v] of chatMemory.entries()) {
+        if (v.lastUsed < oldestTime) {
+          oldestTime = v.lastUsed;
+          oldestKey = k;
+        }
+      }
+      if (oldestKey) chatMemory.delete(oldestKey);
+    }
+    chatMemory.set(chatId, { messages: [], lastUsed: Date.now() });
   }
-  return chatMemory.get(chatId);
+  const session = chatMemory.get(chatId);
+  session.lastUsed = Date.now();
+  return session.messages;
 }
 
 function addToChatHistory(chatId, role, text) {
+  if (!chatId || !text) return;
   const history = getChatHistory(chatId);
-  history.push({ role, parts: [{ text }] });
-  if (history.length > 20) {
-    history.splice(0, history.length - 20);
+  // GoogleGenerativeAI exige que los roles alternen ('user' -> 'model') y que el primero sea 'user'
+  if (history.length === 0 && role !== 'user') {
+    return;
+  }
+  if (history.length > 0 && history[history.length - 1].role === role) {
+    // Si el último turno es del mismo rol, concatenamos de forma limpia para nunca romper el contrato de Gemini
+    history[history.length - 1].parts[0].text += '\n' + text;
+  } else {
+    history.push({ role, parts: [{ text }] });
+  }
+  // Mantener los últimos 16 turnos (pares completos user/model)
+  while (history.length > 16) {
+    history.shift();
+  }
+  // Asegurar que siempre empiece con 'user' tras el recorte
+  while (history.length > 0 && history[0].role !== 'user') {
+    history.shift();
   }
 }
 
 /**
- * Genera una respuesta continua conversacional con Gemini recordando el hilo del chat.
+ * Genera una respuesta continua conversacional con Gemini recordando el hilo del chat y lo aprendido.
  */
 async function getContinuousChatResponse({ chatId, incomingText, senderName, chatTitle, isGroup, customPrompt, customApiKey }) {
   const apiKey = customApiKey || process.env.GEMINI_API_KEY;
   if (!apiKey) return null;
 
   try {
-    const { GoogleGenerativeAI } = require('@google/generative-ai');
-    const ai = new GoogleGenerativeAI(apiKey);
-    const systemInstruction = customPrompt && customPrompt.trim().length > 20
-      ? `${customPrompt}\n\nIMPORTANTE: NUNCA uses signos de apertura (¡ o ¿). Sé conciso (1-2 oraciones cortas). Hablá de forma fluida y natural.`
+    const ai = getGenAIClient(apiKey);
+    const learnedBlock = buildLearnedContextPrompt(incomingText);
+    const baseSys = customPrompt && customPrompt.trim().length > 20
+      ? `${customPrompt}\n\nIMPORTANTE: NUNCA uses signos de apertura (¡ o ¿) ni puntos finales. Sé conciso (1-2 oraciones cortas). Hablá de forma fluida y natural.`
       : GEMINI_SYSTEM_INSTRUCTION;
+    const systemInstruction = baseSys + learnedBlock;
 
     const branchName = detectBranch(incomingText, chatTitle) || 'No especificada';
     const history = getChatHistory(chatId);
@@ -746,27 +831,34 @@ async function getContinuousChatResponse({ chatId, incomingText, senderName, cha
       ? `[${senderName} en grupo "${chatTitle}" - Sucursal: ${branchName}${groupInstruction}]: ${incomingText}`
       : `[${senderName} en privado]: ${incomingText}`;
 
-    // Lista de modelos disponibles con fallback automático si uno tiene alta demanda (503)
-    const candidateModels = ['gemini-3.5-flash-lite', 'gemini-3.5-flash', 'gemini-3.1-flash-lite'];
+    const candidateModels = getOrderedCandidateModels();
     let result = null;
 
     for (const modelName of candidateModels) {
+      let timerId = null;
       try {
         const model = ai.getGenerativeModel({ model: modelName, systemInstruction });
-        const chat = model.startChat({ history: history.slice() });
-        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Gemini timeout')), 7000));
+        const chat = model.startChat({ history: history.map(h => ({ role: h.role, parts: [{ text: h.parts[0].text }] })) });
+        const timeoutPromise = new Promise((_, reject) => {
+          timerId = setTimeout(() => reject(new Error('Gemini timeout')), 5500);
+        });
         result = await Promise.race([chat.sendMessage(userMessage), timeoutPromise]);
-        if (result && result.response) break;
+        if (timerId) clearTimeout(timerId);
+        if (result && result.response) {
+          markModelSuccess(modelName);
+          break;
+        }
       } catch (errRetry) {
-        console.warn(`[Gemini Retry] Modelo ${modelName} falló: ${errRetry.message}. Probando siguiente...`);
+        if (timerId) clearTimeout(timerId);
+        markModelFailure(modelName);
+        console.warn(`[Gemini Balanceador] ${modelName} demoró o dio 503 (${errRetry.message}). Saltando al siguiente...`);
       }
     }
 
     if (!result || !result.response) return null;
-    let text = cleanHumanText(result.response.text());
+    const text = cleanHumanText(result.response.text());
 
     if (text) {
-      // Guardar en memoria para el próximo turno
       addToChatHistory(chatId, 'user', userMessage);
       addToChatHistory(chatId, 'model', text);
       return { text, detectedBranch: branchName };
@@ -777,7 +869,230 @@ async function getContinuousChatResponse({ chatId, incomingText, senderName, cha
   return null;
 }
 
+// ==========================================
+// 9. MOTOR DE AUTO-ENTRENAMIENTO Y APRENDIZAJE CONTINUO (RAM CACHE + DEBOUNCED I/O)
+// ==========================================
+const LEARNED_MEMORY_PATH = path.join(__dirname, 'learned_memory.json');
+const lastIncomingPerChat = new Map();
+const recentBotOutputs = new Set();
+
+// Caché en memoria RAM para evitar lecturas de disco en cada mensaje
+let inMemoryLearnedCache = null;
+let saveDebounceTimer = null;
+
+const STOPWORDS_ES = new Set([
+  'hola', 'buenas', 'buen', 'tardes', 'noches', 'chicos', 'como', 'estan', 'todo', 'bien',
+  'para', 'pero', 'porque', 'cuando', 'donde', 'este', 'esta', 'estos', 'estas', 'tiene',
+  'tienen', 'hace', 'hacer', 'puede', 'pueden', 'desde', 'hasta', 'entre', 'sobre', 'sistemas',
+  'guardia', 'favor', 'gracias', 'dale', 'joya', 'genial', 'local', 'sucursal'
+]);
+
+function extractSignificantTokens(str = '') {
+  return normalizeText(str)
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter(w => w.length >= 3 && !STOPWORDS_ES.has(w));
+}
+
+function registerBotOutput(text = '') {
+  if (!text) return;
+  const clean = text.trim();
+  recentBotOutputs.add(clean);
+  setTimeout(() => recentBotOutputs.delete(clean), 35000);
+}
+
+function isBotGeneratedOutput(text = '') {
+  if (!text) return false;
+  const clean = text.trim();
+  if (recentBotOutputs.has(clean)) return true;
+  if (
+    clean.startsWith('🚨 *Alerta Guardia') ||
+    clean.startsWith('🤖 *Estado del Bot') ||
+    clean.startsWith('🛡️ *Guardia Actual') ||
+    clean.startsWith('✅') ||
+    clean.startsWith('🧹') ||
+    clean.startsWith('🛠️') ||
+    clean.startsWith('🧠') ||
+    clean.startsWith('🔔 *Rotación')
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function recordIncomingForLearning(chatId, text, senderName = 'Usuario') {
+  if (!chatId || !text) return;
+  const clean = text.trim();
+  if (clean.startsWith('#') || clean.length < 3) return;
+
+  // Limpiar entradas viejas si el mapa crece
+  if (lastIncomingPerChat.size > 200) {
+    const firstKey = lastIncomingPerChat.keys().next().value;
+    if (firstKey) lastIncomingPerChat.delete(firstKey);
+  }
+
+  lastIncomingPerChat.set(chatId, {
+    text: clean.replace(/@\d{7,16}/g, '').trim(),
+    senderName,
+    timestamp: Date.now()
+  });
+}
+
+function readLearnedMemory() {
+  if (inMemoryLearnedCache) {
+    return inMemoryLearnedCache;
+  }
+  try {
+    if (fs.existsSync(LEARNED_MEMORY_PATH)) {
+      inMemoryLearnedCache = JSON.parse(fs.readFileSync(LEARNED_MEMORY_PATH, 'utf8'));
+      if (!Array.isArray(inMemoryLearnedCache.stylePhrases)) inMemoryLearnedCache.stylePhrases = [];
+      if (!Array.isArray(inMemoryLearnedCache.qaPairs)) inMemoryLearnedCache.qaPairs = [];
+      return inMemoryLearnedCache;
+    }
+  } catch (e) {
+    console.warn('[Auto-Learn] Error leyendo learned_memory.json:', e.message);
+  }
+  inMemoryLearnedCache = { stylePhrases: [], qaPairs: [] };
+  return inMemoryLearnedCache;
+}
+
+function writeLearnedMemory(data) {
+  inMemoryLearnedCache = data;
+  if (saveDebounceTimer) clearTimeout(saveDebounceTimer);
+  saveDebounceTimer = setTimeout(() => {
+    try {
+      fs.writeFileSync(LEARNED_MEMORY_PATH, JSON.stringify(inMemoryLearnedCache, null, 2), 'utf8');
+    } catch (e) {
+      console.warn('[Auto-Learn] Error guardando learned_memory.json:', e.message);
+    }
+  }, 300);
+}
+
+/**
+ * Registra una respuesta escrita manualmente por Facu o Ramiro para que el bot aprenda su vocabulario y soluciones.
+ */
+function learnFromHumanReply(chatId, humanReplyText = '', quotedQuestionText = '', techName = 'Técnico') {
+  const cleanReply = cleanHumanText(humanReplyText);
+  // Ignorar respuestas monosilábicas ("ok", "si", "dale", "ya va") o comandos
+  if (cleanReply.length < 8 || cleanReply.startsWith('#')) return false;
+  if (isBotGeneratedOutput(humanReplyText) || isBotGeneratedOutput(cleanReply)) return false;
+
+  const memory = readLearnedMemory();
+
+  // 1. Guardar en frases de estilo si aporta vocabulario nuevo
+  const replyNorm = normalizeText(cleanReply);
+  const alreadyInStyle = memory.stylePhrases.some(p => normalizeText(p) === replyNorm);
+  if (!alreadyInStyle) {
+    memory.stylePhrases.unshift(cleanReply);
+    if (memory.stylePhrases.length > 75) memory.stylePhrases.pop();
+  }
+
+  // 2. Determinar a qué pregunta/incidente respondió el humano
+  let questionContext = (quotedQuestionText || '').replace(/@\d{7,16}/g, '').trim();
+  if (!questionContext && chatId && lastIncomingPerChat.has(chatId)) {
+    const lastInc = lastIncomingPerChat.get(chatId);
+    if (Date.now() - lastInc.timestamp < 45 * 60 * 1000) {
+      questionContext = lastInc.text;
+    }
+  }
+
+  if (questionContext && questionContext.length >= 5) {
+    const qTokens = extractSignificantTokens(questionContext);
+    // Buscar si ya existe una pregunta muy similar (>= 75% de tokens coincidentes) para actualizarla en vez de duplicarla
+    let existingIdx = -1;
+    for (let i = 0; i < memory.qaPairs.length; i++) {
+      const itemNorm = normalizeText(memory.qaPairs[i].question);
+      if (itemNorm === normalizeText(questionContext)) {
+        existingIdx = i;
+        break;
+      }
+      if (qTokens.length >= 2) {
+        const itemTokens = extractSignificantTokens(memory.qaPairs[i].question);
+        const matches = qTokens.filter(t => itemTokens.includes(t)).length;
+        const similarity = matches / Math.max(qTokens.length, itemTokens.length);
+        if (similarity >= 0.75) {
+          existingIdx = i;
+          break;
+        }
+      }
+    }
+
+    const entry = {
+      question: questionContext,
+      humanAnswer: cleanReply,
+      learnedBy: techName,
+      timestamp: new Date().toISOString()
+    };
+
+    if (existingIdx !== -1) {
+      memory.qaPairs.splice(existingIdx, 1);
+      memory.qaPairs.unshift(entry); // Mover al tope con la solución más reciente
+    } else {
+      memory.qaPairs.unshift(entry);
+      if (memory.qaPairs.length > 100) memory.qaPairs.pop();
+    }
+    console.log(`[🧠 Auto-Entrenamiento] Caso aprendido (${techName}): "${questionContext}" ➔ "${cleanReply}"`);
+  } else {
+    console.log(`[🧠 Auto-Entrenamiento] Modismo aprendido (${techName}): "${cleanReply}"`);
+  }
+
+  writeLearnedMemory(memory);
+  return true;
+}
+
+/**
+ * Construye el bloque de memoria aprendida más relevante para inyectar en el prompt de Gemini (0ms desde RAM).
+ */
+function buildLearnedContextPrompt(incomingText = '') {
+  const memory = readLearnedMemory();
+  if ((!memory.qaPairs || memory.qaPairs.length === 0) && (!memory.stylePhrases || memory.stylePhrases.length === 0)) {
+    return '';
+  }
+
+  const queryTokens = extractSignificantTokens(incomingText);
+
+  // Puntuar los pares Q&A por similitud semántica de palabras clave y frescura
+  const scoredPairs = (memory.qaPairs || []).map((pair, idx) => {
+    const pairTokens = extractSignificantTokens(pair.question);
+    let score = 0;
+    for (const qt of queryTokens) {
+      if (pairTokens.some(pt => pt.includes(qt) || qt.includes(pt))) {
+        score += 4;
+      }
+    }
+    // Bonus de actualidad para priorizar los criterios más nuevos
+    score += Math.max(0, (20 - idx) * 0.15);
+    return { ...pair, score };
+  });
+
+  scoredPairs.sort((a, b) => b.score - a.score);
+  const topPairs = scoredPairs.slice(0, 10);
+  const recentPhrases = (memory.stylePhrases || []).slice(0, 12);
+
+  let block = '\n\nMEMORIA DE AUTO-ENTRENAMIENTO (RESPUESTAS REALES DE FACU Y RAMIRO):\n';
+  block += 'Adoptá este mismo vocabulario, expresiones y soluciones reales aprendidas de nosotros:\n';
+
+  if (topPairs.length > 0) {
+    block += '\nCasos reales resueltos manualmente:\n';
+    for (const p of topPairs) {
+      block += `- Consulta: "${p.question}" ➔ Respuesta nuestra: "${p.humanAnswer}"\n`;
+    }
+  }
+
+  if (recentPhrases.length > 0) {
+    block += '\nNuestro estilo real de escritura:\n';
+    block += recentPhrases.map(f => `"${f}"`).join(' | ') + '\n';
+  }
+
+  return block;
+}
+
 module.exports = {
+  registerBotOutput,
+  isBotGeneratedOutput,
+  recordIncomingForLearning,
+  learnFromHumanReply,
+  readLearnedMemory,
   getContinuousChatResponse,
   addToChatHistory,
   isWithinWorkingHours,

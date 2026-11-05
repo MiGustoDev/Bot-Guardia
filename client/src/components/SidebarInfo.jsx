@@ -450,6 +450,40 @@ export default function SidebarInfo({ activityLog }) {
             </span>
           </button>
 
+          {/* #aprendido */}
+          <button
+            onClick={() => handleExecuteCommand('#aprendido')}
+            disabled={executingCmd !== null}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '9px 12px',
+              backgroundColor: 'var(--wa-surface-subtle)',
+              border: '1px solid var(--wa-border-subtle)',
+              borderRadius: '8px',
+              textAlign: 'left',
+              width: '100%',
+              transition: 'all 0.2s'
+            }}
+            onMouseOver={(e) => {
+              e.currentTarget.style.backgroundColor = 'var(--wa-surface-subtle-hover)';
+              e.currentTarget.style.borderColor = 'var(--wa-teal)';
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.backgroundColor = 'var(--wa-surface-subtle)';
+              e.currentTarget.style.borderColor = 'var(--wa-border-subtle)';
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Sparkles size={12} color="var(--wa-green)" />
+              <code style={{ color: 'var(--wa-green)', fontWeight: '700', fontSize: '12px' }}>#aprendido</code>
+            </div>
+            <span style={{ color: 'var(--wa-text-secondary)', fontSize: '11px' }}>
+              {executingCmd === '#aprendido' ? 'Consultando...' : 'Ver memoria aprendida'}
+            </span>
+          </button>
+
           {/* #limpiar */}
           <button
             onClick={() => handleExecuteCommand('#limpiar')}

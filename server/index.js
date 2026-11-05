@@ -42,38 +42,49 @@ let currentQr = null;
 let activityLog = [];
 const botStartTime = Date.now();
 
-// Helper functions for storage
+// Caché en memoria RAM para Configuración y Reglas (0ms de lectura en cada mensaje)
+let cachedRules = null;
+let cachedConfig = null;
+let rotationIntervalId = null;
+let gcIntervalId = null;
+
 function readRules() {
+  if (cachedRules) return cachedRules;
   try {
-    return JSON.parse(fs.readFileSync(RULES_PATH, 'utf8'));
+    cachedRules = JSON.parse(fs.readFileSync(RULES_PATH, 'utf8'));
+    return cachedRules;
   } catch (err) {
-    return [];
+    cachedRules = [];
+    return cachedRules;
   }
 }
 
 function writeRules(rules) {
+  cachedRules = rules;
   fs.writeFileSync(RULES_PATH, JSON.stringify(rules, null, 2));
 }
 
 function readConfig() {
+  if (cachedConfig) return cachedConfig;
   try {
-    return JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
+    cachedConfig = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
+    return cachedConfig;
   } catch (err) {
-    return {
+    cachedConfig = {
       botEnabled: true,
       onlyOnMention: true,
       mentionReplyMessage: 'No te preocupes, ya lo estamos revisando',
-      geminiEnabled: false,
+      geminiEnabled: true,
       geminiApiKey: '',
-      geminiPrompt: 'Eres el asistente técnico de Guardia de Sistemas de Mi Gusto. Atiendes sucursales y locales ante emergencias técnicas. Sé directo, cordial y solicita sucursal y detalle del incidente.',
+      geminiPrompt: '',
       delayMin: 1,
       delayMax: 2
     };
+    return cachedConfig;
   }
 }
 
 function writeConfig(config) {
-  // Si se envía una API Key nueva desde el panel, la guardamos en .env y dejamos config.json limpio para GitHub
   const toSave = { ...config };
   if (toSave.geminiApiKey && toSave.geminiApiKey.trim()) {
     process.env.GEMINI_API_KEY = toSave.geminiApiKey.trim();
@@ -81,6 +92,7 @@ function writeConfig(config) {
     fs.writeFileSync(envFile, `GEMINI_API_KEY=${process.env.GEMINI_API_KEY}\n`, 'utf8');
   }
   toSave.geminiApiKey = ''; // Nunca guardar el secreto en config.json
+  cachedConfig = toSave;
   fs.writeFileSync(CONFIG_PATH, JSON.stringify(toSave, null, 2));
 }
 
@@ -178,13 +190,16 @@ function initWhatsApp() {
       }
     };
 
-    // Ejecutar chequeo inicial y programar cada 15 minutos
+    // Ejecutar chequeo inicial y programar cada 15 minutos (limpiando timers previos si reconectó)
+    if (rotationIntervalId) clearInterval(rotationIntervalId);
+    if (gcIntervalId) clearInterval(gcIntervalId);
+
     checkAndNotifyRotation();
-    setInterval(checkAndNotifyRotation, 15 * 60 * 1000);
+    rotationIntervalId = setInterval(checkAndNotifyRotation, 15 * 60 * 1000);
 
     // Limpieza automática preventiva de caché de Chromium cada 24 horas
     knowledge.cleanChromiumCache();
-    setInterval(() => {
+    gcIntervalId = setInterval(() => {
       try {
         knowledge.cleanChromiumCache();
       } catch (err) {
@@ -220,8 +235,31 @@ function initWhatsApp() {
 
   client.on('message_create', async (msg) => {
     try {
-      // Ignorar mensajes enviados por el bot mismo
-      if (msg.fromMe) return;
+      const rawText = (msg.body || '').trim();
+      if (!rawText) return;
+      if (msg.from === 'status@broadcast' || msg.to === 'status@broadcast') return;
+
+      // A) SI EL MENSAJE SALIÓ DE LA PROPIA CUENTA DEL TELÉFONO DE GUARDIA (msg.fromMe)
+      if (msg.fromMe) {
+        // Si no fue generado por el código del bot, significa que Facu o Ramiro respondieron manualmente desde el celular o WhatsApp Web
+        if (!knowledge.isBotGeneratedOutput(rawText)) {
+          const targetChatId = msg.to || msg.from;
+          let quotedQuestion = '';
+          try {
+            if (msg.hasQuotedMsg) {
+              const quoted = await msg.getQuotedMessage();
+              if (quoted && quoted.body) quotedQuestion = quoted.body;
+            }
+          } catch (_) {}
+
+          const learned = knowledge.learnFromHumanReply(targetChatId, rawText, quotedQuestion, 'Guardia Manual');
+          if (learned) {
+            knowledge.addToChatHistory(targetChatId, 'model', rawText);
+            logActivity('system', '🧠 Auto-Entrenamiento', quotedQuestion || 'Respuesta manual detectada', `Aprendido: "${rawText}"`);
+          }
+        }
+        return;
+      }
 
       const config = readConfig();
       if (!config.botEnabled) return;
@@ -267,6 +305,36 @@ function initWhatsApp() {
         isMentioned = true;
       }
 
+      // Detectar si quien escribe en el grupo es Facu o Ramiro desde su número personal (sin arrobar al bot) para aprender de sus respuestas a las sucursales
+      const authorId = (msg.author || msg.from || '').split('@')[0];
+      const techNumbers = [
+        knowledge.TECNICOS.ramiro.phone,
+        knowledge.TECNICOS.facu.phone,
+        '3876117799',
+        '1163704522'
+      ];
+      const isAuthorTech = techNumbers.some(t => authorId.includes(t) || t.includes(authorId));
+
+      if (isGroup && isAuthorTech && !isMentioned) {
+        let quotedQuestion = '';
+        try {
+          if (msg.hasQuotedMsg) {
+            const quoted = await msg.getQuotedMessage();
+            if (quoted && quoted.body) quotedQuestion = quoted.body;
+          }
+        } catch (_) {}
+        const learned = knowledge.learnFromHumanReply(fromNumber, incomingText, quotedQuestion, 'Técnico en Grupo');
+        if (learned) {
+          logActivity('system', '🧠 Auto-Entrenamiento (Grupo)', quotedQuestion || 'Intervención de técnico', `Aprendido: "${incomingText}"`);
+        }
+        return;
+      }
+
+      // Registrar siempre el mensaje entrante del usuario/sucursal para tener el contexto si un técnico le responde manualmente después
+      if (!isAuthorTech) {
+        knowledge.recordIncomingForLearning(fromNumber, incomingText);
+      }
+
       // Si es un grupo y config.onlyOnMention está activo, solo responder si fue mencionado
       if (isGroup && config.onlyOnMention && !isMentioned) {
         return;
@@ -292,6 +360,7 @@ function initWhatsApp() {
       if (!isGroup) {
         const commandReply = knowledge.processTechCommand(incomingText, fromNumber, botStartTime);
         if (commandReply) {
+          knowledge.registerBotOutput(commandReply);
           await msg.reply(commandReply);
           console.log(`[Tech Command / Assignment] Respondido: ${commandReply}`);
           logActivity('outgoing', 'Bot (Comando Técnico)', incomingText, commandReply);
@@ -336,6 +405,9 @@ function initWhatsApp() {
 
           await sleep(typingTime);
 
+          // Registrar salida del bot para no auto-aprenderse a sí mismo
+          knowledge.registerBotOutput(continuousRes.text);
+
           // Si es grupo responde citando, si es privado responde directo
           if (isGroup) {
             await msg.reply(continuousRes.text);
@@ -368,6 +440,7 @@ function initWhatsApp() {
               if (!isSenderTech) {
                 await sleep(2000);
                 const privGreeting = `buenas ${senderName}, te escribo por acá por lo que comentaste en el grupo de Procesos así no llenamos el grupo de mensajes, contame bien qué pasó o pasame foto/AnyDesk y lo vemos`;
+                knowledge.registerBotOutput(privGreeting);
                 await client.sendMessage(senderId, privGreeting);
                 knowledge.addToChatHistory(senderId, 'user', `[Contexto del grupo ${chatTitle}]: ${incomingText}`);
                 knowledge.addToChatHistory(senderId, 'model', privGreeting);
@@ -395,6 +468,7 @@ function initWhatsApp() {
 
               for (const techPhone of activeTechs) {
                 const techJid = `${techPhone}@c.us`;
+                knowledge.registerBotOutput(alertMsg);
                 await client.sendMessage(techJid, alertMsg);
                 console.log(`[Alerta Técnico] Enviada a ${techPhone}`);
               }
@@ -471,6 +545,10 @@ app.post('/api/config', (req, res) => {
   const config = req.body;
   writeConfig(config);
   res.json({ success: true, message: 'Configuración guardada correctamente.' });
+});
+
+app.get('/api/learned', (req, res) => {
+  res.json(knowledge.readLearnedMemory());
 });
 
 app.get('/api/activity', (req, res) => {
