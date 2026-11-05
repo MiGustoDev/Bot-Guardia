@@ -1,4 +1,4 @@
-require('dotenv').config();
+require('dotenv').config({ path: require('path').join(__dirname, '.env') });
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -7,7 +7,7 @@ const fs = require('fs');
 const path = require('path');
 const QRCode = require('qrcode');
 const { Client, LocalAuth } = require('whatsapp-web.js');
-const { GoogleGenAI } = require('@google/generative-ai');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 const knowledge = require('./knowledge');
 
 const app = express();
@@ -19,7 +19,7 @@ const io = new Server(server, {
   }
 });
 
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5050;
 
 app.use(cors());
 app.use(express.json());
@@ -73,7 +73,15 @@ function readConfig() {
 }
 
 function writeConfig(config) {
-  fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
+  // Si se envía una API Key nueva desde el panel, la guardamos en .env y dejamos config.json limpio para GitHub
+  const toSave = { ...config };
+  if (toSave.geminiApiKey && toSave.geminiApiKey.trim()) {
+    process.env.GEMINI_API_KEY = toSave.geminiApiKey.trim();
+    const envFile = path.join(__dirname, '.env');
+    fs.writeFileSync(envFile, `GEMINI_API_KEY=${process.env.GEMINI_API_KEY}\n`, 'utf8');
+  }
+  toSave.geminiApiKey = ''; // Nunca guardar el secreto en config.json
+  fs.writeFileSync(CONFIG_PATH, JSON.stringify(toSave, null, 2));
 }
 
 // Log helper
@@ -111,7 +119,7 @@ function initWhatsApp() {
     }),
     webVersionCache: {
       type: 'remote',
-      remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/{version}.html'
+      remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.3000.1053100174-alpha.html'
     },
     puppeteer: {
       headless: true,
@@ -212,27 +220,26 @@ function initWhatsApp() {
 
   client.on('message_create', async (msg) => {
     try {
-      console.log(`[DEBUG] Evento message_create recibido! From: ${msg.from}, Body: ${msg.body}, FromMe: ${msg.fromMe}`);
-      
-      // Ignore self-sent messages
+      // Ignorar mensajes enviados por el bot mismo
       if (msg.fromMe) return;
 
       const config = readConfig();
       if (!config.botEnabled) return;
 
-      // Ignore status broadcasts immediately
+      // Ignorar estados de WhatsApp
       if (msg.from === 'status@broadcast') return;
 
-      const incomingText = msg.body || '';
+      const incomingText = (msg.body || '').trim();
+      if (!incomingText) return;
+
       const fromNumber = msg.from;
       const isGroup = fromNumber.endsWith('@g.us');
 
-      // Obtener información del bot para chequear si fue mencionado
+      // Obtener identificadores del bot para verificar menciones
       const myWid = client.info?.wid?._serialized || '';
       const myLid = client.info?.lid?._serialized || '';
       const myNumber = client.info?.wid?.user || '';
 
-      // Obtener menciones formales
       let isMentioned = false;
       let rawMentions = [];
       try {
@@ -252,7 +259,7 @@ function initWhatsApp() {
         console.error('Error getting mentions:', err);
       }
 
-      // Chequeo secundario por texto si contiene @miNumero o @sistemas
+      // Chequeo complementario de mención en el texto
       if (!isMentioned && myNumber && incomingText.includes(`@${myNumber}`)) {
         isMentioned = true;
       }
@@ -260,14 +267,9 @@ function initWhatsApp() {
         isMentioned = true;
       }
 
-      console.log(`[Mention Check] isGroup: ${isGroup}, isMentioned: ${isMentioned}, myWid: ${myWid}, myLid: ${myLid}, rawMentions:`, rawMentions.map(m => m.id?._serialized));
-
-      // Si está en modo "solo cuando es arrobado", ignorar mensajes donde no sea mencionado
-      if (config.onlyOnMention) {
-        if (isGroup && !isMentioned) {
-          console.log('[Ignorado] Mensaje en grupo sin mención al bot.');
-          return;
-        }
+      // Si es un grupo y config.onlyOnMention está activo, solo responder si fue mencionado
+      if (isGroup && config.onlyOnMention && !isMentioned) {
+        return;
       }
 
       let senderName = 'Usuario';
@@ -286,7 +288,7 @@ function initWhatsApp() {
 
       console.log(`[Message Received] [${chatTitle}] From: ${senderName} (${fromNumber}): ${incomingText}`);
 
-      // 0. Si es un mensaje privado, verificar comandos de diagnóstico o asignación de guardia (#ping, #guardia, etc.)
+      // 0. Si es mensaje privado, chequear comandos técnicos primero (#ping, #guardia, etc.)
       if (!isGroup) {
         const commandReply = knowledge.processTechCommand(incomingText, fromNumber, botStartTime);
         if (commandReply) {
@@ -297,120 +299,97 @@ function initWhatsApp() {
         }
       }
 
-      // 1. REGLA HORARIA: No responder de 00:00 a 09:00 hs (se controla en knowledge.js)
+      // 1. REGLA HORARIA: 09:00 a 23:59 hs
       if (!knowledge.isWithinWorkingHours()) {
-        console.log(`[Horario de Guardia] Mensaje recibido a las ${new Date().toLocaleTimeString()} (fuera de rango de atención 09:00 a 23:59). No se responde.`);
+        console.log(`[Horario de Guardia] Mensaje fuera de horario (09:00 a 23:59). No se responde.`);
         return;
       }
 
-      // Si fue mencionado en grupo o modo onlyOnMention activo
-      if (isMentioned || (config.onlyOnMention && isGroup)) {
-        const geminiApiKey = config.geminiApiKey || process.env.GEMINI_API_KEY || '';
-        const geminiPrompt = config.geminiPrompt || '';
-        const responsePlan = await knowledge.getGuardiaMentionResponse({ 
-          incomingText, 
+      const geminiApiKey = config.geminiApiKey || process.env.GEMINI_API_KEY || '';
+      const geminiPrompt = config.geminiPrompt || '';
+      const chatId = msg.from;
+      const targetChat = chat || (await msg.getChat().catch(() => null));
+
+      // 2. FUNCIÓN DE RESPUESTA CONTINUA CON GEMINI
+      if (config.geminiEnabled && geminiApiKey) {
+        const continuousRes = await knowledge.getContinuousChatResponse({
+          chatId,
+          incomingText,
+          senderName,
           chatTitle,
+          isGroup,
           customPrompt: geminiPrompt,
           customApiKey: geminiApiKey
         });
-        const chatId = msg.from;
-        const senderId = msg.author || msg.from; // ID de quien arrobó en el grupo
 
-        // 2. ANTI-FLOOD / COOLDOWN POR SUCURSAL:
-        // Si mandan varios mensajes seguidos en menos de 1 minuto, no spammear ni responder múltiples veces
-        const cooldownCheck = knowledge.checkBranchCooldown(chatId, responsePlan.detectedBranch);
-        if (!cooldownCheck.allowed) {
-          console.log(`[Anti-Flood Activado] Mensaje de ${chatTitle} (${responsePlan.detectedBranch}) bloqueado por cooldown. Quedan ${cooldownCheck.remainingSeconds}s.`);
-          return;
-        }
+        if (continuousRes && continuousRes.text) {
+          // Simular tiempo de lectura y tipeo humano
+          const typingTime = Math.min(Math.max(continuousRes.text.length * 40, 1500), 4000);
+          await sleep(1200);
 
-        try {
-          const targetChat = chat || (await msg.getChat().catch(() => null));
-
-          // A) Responder en el GRUPO con el plan humano (saludo + charla + preguntar sucursal si falta)
-          for (let i = 0; i < responsePlan.messages.length; i++) {
-            const step = responsePlan.messages[i];
-            
-            // Pausa previa
-            await sleep(step.delayBefore || 2000);
-
-            // Activar typing con timeout seguro
-            if (targetChat && typeof targetChat.sendStateTyping === 'function') {
-              Promise.race([
-                targetChat.sendStateTyping(),
-                new Promise((_, reject) => setTimeout(() => reject('timeout'), 500))
-              ]).catch(() => {});
-            }
-
-            // Duración simulando tipeo
-            await sleep(step.typingDuration || 3000);
-
-            if (step.isReply) {
-              await msg.reply(step.text);
-            } else {
-              if (targetChat && typeof targetChat.sendMessage === 'function') {
-                await targetChat.sendMessage(step.text);
-              } else {
-                await client.sendMessage(chatId, step.text);
-              }
-            }
-            console.log(`[Mention-Reply ${i + 1}/${responsePlan.messages.length}] Enviado a ${chatTitle}: "${step.text}"`);
+          if (targetChat && typeof targetChat.sendStateTyping === 'function') {
+            Promise.race([
+              targetChat.sendStateTyping(),
+              new Promise((_, reject) => setTimeout(() => reject('timeout'), 500))
+            ]).catch(() => {});
           }
 
-          // B) Responder al usuario por PRIVADO: "Hola que tal!" (SOLO si no es un técnico de guardia)
-          try {
-            if (senderId && isGroup) {
-              let senderPhoneNumber = '';
-              try {
-                const authorContact = await msg.getContact();
-                senderPhoneNumber = authorContact.number || authorContact.id?.user || '';
-              } catch (_) {}
+          await sleep(typingTime);
 
+          // Si es grupo responde citando, si es privado responde directo
+          if (isGroup) {
+            await msg.reply(continuousRes.text);
+          } else {
+            if (targetChat && typeof targetChat.sendMessage === 'function') {
+              await targetChat.sendMessage(continuousRes.text);
+            } else {
+              await client.sendMessage(chatId, continuousRes.text);
+            }
+          }
+
+          console.log(`[Gemini Continuo] Respondido a ${chatTitle} (${senderName}): "${continuousRes.text}"`);
+          logActivity('incoming', `${senderName} (${chatTitle})`, incomingText, continuousRes.text);
+
+          // Si fue en el grupo "Procesos - Mi Gusto", abrirle conversación por privado al remitente
+          try {
+            const isProcesosGroup = isGroup && chatTitle.toLowerCase().includes('procesos');
+            const senderId = msg.author || msg.from;
+            if (isProcesosGroup && senderId) {
               const cleanSenderId = senderId.split('@')[0];
               const techPhones = [
                 knowledge.TECNICOS.ramiro.phone,
                 knowledge.TECNICOS.facu.phone,
-                '5493876117799',
-                '543876117799',
                 '3876117799',
-                '5491163704522',
-                '541163704522',
                 '1163704522'
               ];
-
-              const isSenderTech = techPhones.some(t => 
-                senderPhoneNumber.includes(t) || 
-                t.includes(senderPhoneNumber) ||
-                cleanSenderId.includes(t) ||
-                t.includes(cleanSenderId)
-              ) || senderName.toLowerCase().includes('facu') || senderName.toLowerCase().includes('rami');
+              const isSenderTech = techPhones.some(t => cleanSenderId.includes(t) || t.includes(cleanSenderId)) ||
+                senderName.toLowerCase().includes('facu') || senderName.toLowerCase().includes('rami');
 
               if (!isSenderTech) {
-                // Pequeña pausa antes de escribirle por privado
-                await sleep(1500);
-                await client.sendMessage(senderId, "Hola que tal!");
-                console.log(`[Privado a Usuario] Enviado "Hola que tal!" a ${senderId}`);
-              } else {
-                console.log(`[Privado a Usuario] Omitido porque el remitente (${senderName} / ${senderId}) es un técnico del equipo.`);
+                await sleep(2000);
+                const privGreeting = `buenas ${senderName}, te escribo por acá por lo que comentaste en el grupo de Procesos así no llenamos el grupo de mensajes, contame bien qué pasó o pasame foto/AnyDesk y lo vemos`;
+                await client.sendMessage(senderId, privGreeting);
+                knowledge.addToChatHistory(senderId, 'user', `[Contexto del grupo ${chatTitle}]: ${incomingText}`);
+                knowledge.addToChatHistory(senderId, 'model', privGreeting);
+                console.log(`[Privado desde Procesos] Iniciado chat privado con ${senderName} (${senderId})`);
               }
             }
           } catch (privErr) {
-            console.error('[Error enviando privado al usuario]:', privErr.message);
+            console.error('[Error iniciando privado desde Procesos]:', privErr.message);
           }
 
-          // C) ALERTA INTERNA AL TÉCNICO DE GUARDIA
-          // REGLA: Lunes a Viernes de 17:15 a 23:59 hs. Sábados y Domingos todo el día.
+
+          // Alerta al técnico de guardia si corresponde por horario
           try {
             if (knowledge.shouldAlertTech()) {
               const activeTechs = knowledge.getActiveTechNumbers();
-              const branchName = responsePlan.detectedBranch || 'No especificada';
+              const branchName = continuousRes.detectedBranch || 'No especificada';
               const alertMsg = `🚨 *Alerta Guardia Sistemas*\n\n` +
-                `*Grupo:* ${chatTitle}\n` +
+                `*Chat:* ${chatTitle}\n` +
                 `*De:* ${senderName}\n` +
                 `*Sucursal:* ${branchName}\n` +
                 `*Mensaje:* "${incomingText}"`;
 
-              // Registrar métrica para el reporte de cierre semanal del lunes
               const isWeekend = (new Date().getDay() === 0 || new Date().getDay() === 6);
               knowledge.recordWeeklyAlert(branchName, isWeekend);
 
@@ -419,95 +398,41 @@ function initWhatsApp() {
                 await client.sendMessage(techJid, alertMsg);
                 console.log(`[Alerta Técnico] Enviada a ${techPhone}`);
               }
-            } else {
-              console.log(`[Alerta Técnico] Fuera del horario de alerta a técnicos (Lun a Vie 17:15-23:59 o Fines de Semana). Alerta no enviada.`);
             }
           } catch (techErr) {
             console.error('[Error enviando alerta al técnico]:', techErr.message);
           }
 
-          logActivity('incoming', `${senderName} en ${chatTitle}`, incomingText, responsePlan.summaryText);
-        } catch (err) {
-          console.error('Error detallado en flujo de guardia:', err);
+          return;
         }
+      }
+
+      // Fallback si Gemini no estuviera disponible: flujo tradicional de guardia
+      if (isMentioned || (config.onlyOnMention && isGroup)) {
+        const responsePlan = await knowledge.getGuardiaMentionResponse({ 
+          incomingText, 
+          chatTitle,
+          customPrompt: geminiPrompt,
+          customApiKey: geminiApiKey
+        });
+
+        for (let i = 0; i < responsePlan.messages.length; i++) {
+          const step = responsePlan.messages[i];
+          await sleep(step.delayBefore || 1500);
+          if (step.isReply) {
+            await msg.reply(step.text);
+          } else {
+            if (targetChat && typeof targetChat.sendMessage === 'function') {
+              await targetChat.sendMessage(step.text);
+            } else {
+              await client.sendMessage(chatId, step.text);
+            }
+          }
+        }
+        logActivity('incoming', `${senderName} en ${chatTitle}`, incomingText, responsePlan.summaryText);
         return;
       }
 
-      // Helper function to normalize text (lowercase, no accents, trimmed)
-      const normalizeText = (str) => {
-        if (!str) return '';
-        return str
-          .toLowerCase()
-          .normalize("NFD")
-          .replace(/[\u0300-\u036f]/g, "")
-          .trim();
-      };
-
-      // 1. Check local rules (solo si no es onlyOnMention o si se desea procesar reglas)
-      const rules = readRules();
-      let matchedRule = null;
-
-      for (const rule of rules) {
-        if (!rule.active) continue;
-        
-        const triggerClean = normalizeText(rule.trigger);
-        const msgClean = normalizeText(incomingText);
-
-        if (rule.type === 'exact' && msgClean === triggerClean) {
-          matchedRule = rule;
-          break;
-        } else if (rule.type === 'contains' && msgClean.includes(triggerClean)) {
-          matchedRule = rule;
-          break;
-        } else if (rule.type === 'starts_with' && msgClean.startsWith(triggerClean)) {
-          matchedRule = rule;
-          break;
-        }
-      }
-
-      if (matchedRule) {
-        try {
-          const options = matchedRule.reply
-            .split(/[|\n]/)
-            .map(r => r.trim())
-            .filter(r => r.length > 0);
-          
-          const selectedReply = options.length > 0 
-            ? options[Math.floor(Math.random() * options.length)]
-            : matchedRule.reply;
-
-          await humanReply(selectedReply);
-          logActivity('incoming', `${senderName} (${chatTitle})`, incomingText, selectedReply);
-          console.log(`[Auto-Reply] Sent: ${selectedReply}`);
-          return;
-        } catch (err) {
-          console.error('Error sending reply:', err);
-          logActivity('incoming', senderName, incomingText, 'Error al responder', false);
-          return;
-        }
-      }
-
-      // 2. Check Gemini AI if enabled
-      if (config.geminiEnabled && config.geminiApiKey) {
-        try {
-          const ai = new GoogleGenAI({ apiKey: config.geminiApiKey });
-          const model = ai.getGenerativeModel({ model: 'gemini-1.5-flash' });
-          
-          const prompt = `${config.geminiPrompt}\n\nUsuario: ${incomingText}\nRespuesta:`;
-
-          const result = await model.generateContent(prompt);
-          const aiResponse = result.response.text().trim();
-
-          if (aiResponse) {
-            await humanReply(aiResponse);
-            logActivity('incoming', senderName, incomingText, aiResponse);
-            console.log(`[Gemini-Reply] Sent: ${aiResponse}`);
-          }
-        } catch (err) {
-          console.error('Error calling Gemini AI:', err);
-          logActivity('incoming', senderName, incomingText, `Error de AI: ${err.message}`, false);
-        }
-      }
     } catch (globalErr) {
       console.error('Global message handler error:', globalErr);
     }
@@ -595,7 +520,13 @@ app.post('/api/simulate', async (req, res) => {
       }
     }
 
-    const mentionPlan = await knowledge.getGuardiaMentionResponse({ incomingText: text, chatTitle });
+    const cfgSim = readConfig();
+    const mentionPlan = await knowledge.getGuardiaMentionResponse({
+      incomingText: text,
+      chatTitle,
+      customPrompt: cfgSim.geminiPrompt || '',
+      customApiKey: cfgSim.geminiApiKey || process.env.GEMINI_API_KEY || ''
+    });
     const isWorkingHours = knowledge.isWithinWorkingHours();
     const willAlert = knowledge.shouldAlertTech();
     const guardiaState = knowledge.getGuardiaState();
@@ -630,13 +561,15 @@ app.post('/api/simulate', async (req, res) => {
 app.post('/api/logout', async (req, res) => {
   try {
     if (client) {
-      await client.logout();
-      await client.destroy();
+      await client.logout().catch(() => {});
+      await client.destroy().catch(() => {});
     }
     // Delete session files
     const authDir = path.join(__dirname, '.wwebjs_auth');
     if (fs.existsSync(authDir)) {
-      fs.rmSync(authDir, { recursive: true, force: true });
+      try {
+        fs.rmSync(authDir, { recursive: true, force: true });
+      } catch (_) {}
     }
     updateStatus('DISCONNECTED');
     res.json({ success: true, message: 'Sesión cerrada correctamente.' });
@@ -651,7 +584,7 @@ app.post('/api/logout', async (req, res) => {
 app.post('/api/restart', async (req, res) => {
   try {
     if (client) {
-      await client.destroy();
+      await client.destroy().catch(() => {});
     }
     initWhatsApp();
     res.json({ success: true, message: 'Reiniciando bot...' });

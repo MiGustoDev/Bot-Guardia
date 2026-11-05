@@ -7,9 +7,11 @@ export default function DetectionSimulator() {
   const [result, setResult] = useState(null);
 
   const presets = [
-    'Cayó Maxirest en sucursal Devoto',
-    'La impresora comandera no saca tickets en Belgrano',
-    'Estamos sin internet en sucursal Pilar'
+    'No nos anda la comandera en Belgrano',
+    'No aparece la promo en el sistema en Palermo',
+    'Nos sale comanda duplicada en Devoto',
+    'Las pantallas tienen mal los precios en Caballito',
+    'Me figura sin stock de empanadas en Pilar'
   ];
 
   const handleSimulate = async (textToTest) => {
@@ -80,7 +82,7 @@ export default function DetectionSimulator() {
       <div style={{ display: 'flex', gap: '8px' }}>
         <input
           type="text"
-          placeholder="Ej: Se tildó el Maxirest en Palermo / No anda la comandera..."
+          placeholder="Ej: No anda la comandera en Palermo / Necesito instalar comandera / Comanda duplicada..."
           value={testText}
           onChange={(e) => setTestText(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleSimulate()}

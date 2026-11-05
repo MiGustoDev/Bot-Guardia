@@ -11,9 +11,9 @@ import RulesModal from './components/RulesModal';
 import DetectionSimulator from './components/DetectionSimulator';
 
 // Socket URL logic:
-// If Vite dev server on 3000 or 5173, proxy to 5000 or connect directly.
-const SOCKET_URL = window.location.hostname === 'localhost' && window.location.port !== '5000'
-  ? 'http://localhost:5000'
+// If Vite dev server on 3000 or 5173, proxy to 5050 or connect directly.
+const SOCKET_URL = window.location.hostname === 'localhost' && window.location.port !== '5050'
+  ? 'http://localhost:5050'
   : '';
 
 function App() {

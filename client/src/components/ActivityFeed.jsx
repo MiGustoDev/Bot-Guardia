@@ -13,6 +13,56 @@ import {
   Clock
 } from 'lucide-react';
 
+// Renderizado prolijo de menciones (@3855... o @sistemas) con badge WhatsApp
+function renderFormattedMessage(text) {
+  if (!text) return '';
+  const parts = text.split(/(@\d{7,16}|@sistemas|@guardia)/gi);
+  return parts.map((part, i) => {
+    if (/^@\d{7,16}$/.test(part)) {
+      return (
+        <span
+          key={i}
+          style={{
+            color: 'var(--wa-text-link)',
+            backgroundColor: 'rgba(83, 189, 235, 0.16)',
+            padding: '1px 6px',
+            borderRadius: '4px',
+            fontWeight: '600',
+            fontSize: '12px',
+            marginRight: '4px',
+            display: 'inline-flex',
+            alignItems: 'center'
+          }}
+          title={part}
+        >
+          @bot
+        </span>
+      );
+    }
+    if (/^@(sistemas|guardia)$/i.test(part)) {
+      return (
+        <span
+          key={i}
+          style={{
+            color: 'var(--wa-text-link)',
+            backgroundColor: 'rgba(83, 189, 235, 0.16)',
+            padding: '1px 6px',
+            borderRadius: '4px',
+            fontWeight: '600',
+            fontSize: '12px',
+            marginRight: '4px',
+            display: 'inline-flex',
+            alignItems: 'center'
+          }}
+        >
+          {part}
+        </span>
+      );
+    }
+    return part;
+  });
+}
+
 export default function ActivityFeed({ activityLog, onClearView }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all'); // 'all', 'incoming', 'system'
@@ -457,7 +507,7 @@ export default function ActivityFeed({ activityLog, onClearView }) {
                     lineHeight: '1.4',
                     wordBreak: 'break-word'
                   }}>
-                    "{item.text}"
+                    {renderFormattedMessage(item.text)}
                   </div>
                 </div>
 

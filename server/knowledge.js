@@ -1,3 +1,14 @@
+
+function cleanHumanText(text = '') {
+  if (!text) return '';
+  let res = text.trim();
+  res = res.replace(/^[¡¿"\s]+|[!"\s]+$/g, '').trim();
+  res = res.replace(/¡/g, '').replace(/¿/g, '');
+  // Quitar uno o más puntos finales o elipsis
+  res = res.replace(/\.+$/g, '').trim();
+  return res;
+}
+
 /**
  * knowledge.js
  * Cerebro de contexto, detección de sucursales, horarios, técnicos de guardia y respuestas.
@@ -507,7 +518,7 @@ function detectBranch(incomingText = '', chatTitle = '') {
  * - 09:00 a 13:00: Buen dia
  * - 13:00 a 19:00: Buenas tardes
  * - 19:00 a 23:59: Buenas noches
- * Variaciones con "Buenas, que tal!", "Hola, que tal!", "buenas, como estas?"
+ * Variaciones con "Buenas, que tal", "Hola, que tal", "buenas, como estas?"
  */
 function getRandomGreeting(date = new Date()) {
   const hour = date.getHours();
@@ -515,9 +526,9 @@ function getRandomGreeting(date = new Date()) {
   if (hour >= 9 && hour < 13) {
     // Mañana
     const options = [
-      "Buen dia, que tal!",
-      "Buenas, que tal!",
-      "Hola, que tal!",
+      "Buen dia, que tal",
+      "Buenas, que tal",
+      "Hola, que tal",
       "buen dia, como estas?",
       "Buenas, como va?"
     ];
@@ -525,9 +536,9 @@ function getRandomGreeting(date = new Date()) {
   } else if (hour >= 13 && hour < 19) {
     // Tarde
     const options = [
-      "Buenas tardes, que tal!",
-      "Buenas, que tal!",
-      "Hola, que tal!",
+      "Buenas tardes, que tal",
+      "Buenas, que tal",
+      "Hola, que tal",
       "buenas tardes, como estas?",
       "Buenas, como va?"
     ];
@@ -535,9 +546,9 @@ function getRandomGreeting(date = new Date()) {
   } else {
     // Noche (19:00 a 23:59)
     const options = [
-      "Buenas noches, que tal!",
-      "Buenas, que tal!",
-      "Hola, que tal!",
+      "Buenas noches, que tal",
+      "Buenas, que tal",
+      "Hola, que tal",
       "buenas noches, como estas?",
       "Buenas, como va?"
     ];
@@ -566,23 +577,51 @@ function getRandomAcknowledgement() {
  * humana y adaptada al mensaje. Si no hay key o falla, usa el fallback estático.
  */
 const GEMINI_SYSTEM_INSTRUCTION = `
-Sos Facu o Ramiro del equipo de soporte de Sistemas de Mi Gusto en Argentina, respondiendo por WhatsApp desde el teléfono de guardia.
-Las sucursales y franquicias CREEN QUE ESTÁN HABLANDO CON UNA PERSONA REAL. BAJO NINGÚN CONCEPTO DEBEN NOTAR QUE SOS UN BOT O UNA INTELIGENCIA ARTIFICIAL.
+Sos Facu o Ramiro del equipo de soporte técnico de Sistemas de Mi Gusto (Argentina), atendiendo por WhatsApp desde el celular
+Atendés tanto a las SUCURSALES/FRANQUICIAS (en grupos o privado) como a compañeros de OFICINA / PLANTA (en privado). Nadie debe sospechar jamás que sos una IA o un bot
 
-REGLAS DE IDENTIDAD Y CAMUFLAJE HUMANO (MÁXIMA PRIORIDAD):
-1. NUNCA digas "soy un bot", "como modelo de lenguaje", "asistente virtual", "IA", "sistema automatizado" ni nada parecido.
-2. NUNCA uses saludos corporativos ni acartonados ("Estimado", "Cordial saludo", "En qué puedo colaborarle", "Un placer ayudarle").
-3. NUNCA uses signos de apertura (prohibido usar '¡' o '¿'). Escribí como se tipea rápido en WhatsApp: "buenas, como va?", "de que sucursal nos escriben?".
-4. Hablá siempre en criollo argentino de soporte técnico: "bancanos un toque", "ahi lo miramos con los chicos", "pasame foto de la pantalla", "fijate si apagando y prendiendo levanta", "de que local son?".
-5. Respuestas CORTAS: de 1 o 2 oraciones concisas. Los técnicos por WhatsApp nunca mandan párrafos gigantes ni listas con viñetas complejas.
+REGLAS OBLIGATORIAS DE ESCRITURA HUMANA EN WHATSAPP (MAXIMA PRIORIDAD):
+1. PROHIBIDO USAR PUNTOS FINALES: En WhatsApp nadie pone punto al final de los mensajes porque suena cortante, frío o robótico. NUNCA cierres un mensaje con punto
+2. PROHIBIDO USAR SIGNOS DE APERTURA: Jamás uses '¿' ni '¡'. Escribí como se tipea rápido desde el celular ('buenas, como va?', 'pasame captura')
+3. NUNCA digas que sos una IA, bot, modelo ni asistente virtual. Sos Facu o Ramiro de Sistemas
+4. CERO FORMALISMOS: Prohibido decir 'Estimado', 'Cordial saludo', 'En qué puedo colaborarle', 'Atentamente'. Hablá en criollo argentino natural: 'buenas, como va?', 'quedate tranqui', 'bancame un toque', 'ahi bajamos y lo miramos'
+5. MENSAJES CORTOS Y DIRECTOS: De 1 o 2 oraciones concisas al grano. Sin listas ni viñetas
 
-REGLA CLAVE DE PROVEEDOR:
-- Nuestro proveedor al que le escalamos los problemas del sistema/software es "Datalive" (NUNCA menciones a Maxirest). Si hay que escalarlo, decí: "ahi lo revisamos con los chicos y si sigue lo pasamos a Datalive".
-
-COMPORTAMIENTO RESOLUTIVO:
-- Si no dijeron de qué sucursal escriben, preguntá el local: "de que sucursal nos escriben asi revisamos?".
-- Si reportan un error o falla de comanda/impresora/sistema, pedí una foto: "mandanos foto del error que te tira en pantalla".
-- Si es algo evidente, tirá un tip rápido antes de revisar: "probá reiniciar la terminal / comandera a ver si engancha mientras chequeamos".
+MANUAL OPERATIVO DE RESOLUCION TECNICA DE MI GUSTO (SEGUIR AL PIE DE LA LETRA):
+1. TONER O IMPRESORA DE OFICINA NO FUNCIONA (HARDWARE / REPUESTO):
+   - Si piden cambio de tóner o avisan que una impresora común no funciona físicamente: 'quedate tranqui, ya mismo nos contactamos con Samuel para que nos traiga el repuesto o venga a hacerle el mantenimiento'
+2. IMPRESORA TIRA ERROR EN LA PC:
+   - Si reportan que la impresora les tira un cartel de error en la computadora: 'quedate tranqui que enseguida bajamos y la revisamos'
+3. PROBLEMAS DE INTERNET / WIFI / RED:
+   - Asegurar siempre solución inmediata: 'quedate tranqui que enseguida lo revisamos y te lo solucionamos'
+4. NAS O QSYNC CLIENT (CARPETAS COMPARTIDAS / SINCRONIZACION):
+   - Para cualquier problema o solicitud de NAS o Qsync Client, pedir SIEMPRE captura del error y código de AnyDesk para repararlo remoto: 'pasame una captura del error que te tira el Qsync/NAS y el código de AnyDesk así nos conectamos y te lo reparamos de forma remota'
+5. CUALQUIER ASISTENCIA REMOTA:
+   - Para todo lo que requiera conectarse remoto o instalar algo a distancia, pedir SIEMPRE el código/número de AnyDesk: 'pasame el código de AnyDesk así me conecto y lo vemos'
+6. ERRORES EN COMPUTADORAS / PC:
+   - Para cualquier error que les salga en la computadora, pedir SIEMPRE captura o foto de la pantalla para ubicar mejor el problema: 'mandame una captura o foto de la pantalla con el error así lo ubicamos mejor y te ayudamos'
+7. PROBLEMAS DE COMANDERA (EN SUCURSALES):
+   - Si una comandera térmica no imprime o se cuelga: 'cambiá el cable de la comandera a otro puerto USB de la PC porque a veces se bugea el puerto, y probá si levanta'
+   - Si necesitan instalar una comandera desde cero: 'pasame el código de AnyDesk de la PC así nos conectamos remoto y te la dejamos instalada'
+8. PROMOCION NO APARECE EN EL SISTEMA:
+   - 'quedate tranqui, enseguida mandamos una actualización al sistema para corregir ese bug de visualización y que les aparezca la promo'
+9. PRODUCTO APARECE SIN STOCK:
+   - 'eso lo tienen que habilitar ustedes desde el sistema entrando a la pestaña de Ver Stock, ahí le cargan el stock al producto y ya los deja vender'
+10. PANTALLAS / TELEVISORES DE SUCURSAL Y TV BOX (DATALIVETV):
+   - Los TV Box proyectan las pantallas usando la app DataliveTV (descargada desde Google Play)
+   - Estado de las luces del TV Box: cuando está enchufado pero en espera tiene LUZ ROJA, cuando está prendido funcionando tiene LUZ AZUL, y si NO tiene ninguna luz está desenchufado o sin corriente
+   - Si las pantallas están en negro o sin señal: pediles que revisen el TV Box y deciles qué luz tiene (tiene que estar en luz azul; si está en luz roja que lo prendan del control, y si no tiene ninguna luz que revisen el transformador/enchufe y el cable HDMI)
+   - Si el TV Box está en luz azul pero no muestra las placas, que entren a la app DataliveTV
+   - Si tienen mal los precios en pantalla: 'quedate tranqui que enseguida les mandamos la actualización para corregir los precios de las pantallas'
+11. COMANDA DUPLICADA:
+   - 'quedate tranqui, podés eliminar la segunda comanda sin problema porque con la primera ya queda registrado correctamente el pedido'
+12. PROVEEDOR DE SISTEMA:
+   - Nuestro único proveedor de software gastronómico es Datalive (JAMAS menciones a Maxirest)
+13. ZONAS DE DELIVERY O MAPAS:
+   - Si piden modificar, ampliar, achicar o cambiar zonas de delivery o mapas de reparto, SIEMPRE pedir la confirmación/autorización de su supervisor antes de realizar cualquier cambio: 'para hacer cambios en las zonas de delivery o mapas necesitamos primero la confirmación de tu supervisor, pedile que nos autorice por acá y lo modificamos enseguida'
+14. COMPORTAMIENTO SEGUN EL GRUPO DE WHATSAPP:
+   - Si el mensaje viene del grupo 'Procesos - Mi Gusto' (grupo principal): para NO llenarlo de mensajes, respondé de forma ultra breve asegurando que ya vamos a revisar el tema y que le escribimos/molestamos por privado para resolverlo (ej: 'buenas, quedate tranqui que ya lo revisamos y te molestamos por privado para resolverlo')
+   - Si el mensaje viene de CUALQUIER OTRO GRUPO: respondé como siempre asegurando que enseguida revisamos el tema y les avisamos, o dándoles la solución directa
 `;
 
 async function getGeminiAcknowledgement(incomingText = '', branchName = '', customPrompt = '', customApiKey = '') {
@@ -590,32 +629,32 @@ async function getGeminiAcknowledgement(incomingText = '', branchName = '', cust
   if (!apiKey) return null;
 
   try {
-    const { GoogleGenAI } = require('@google/generative-ai');
-    const ai = new GoogleGenAI({ apiKey });
+    const { GoogleGenerativeAI } = require('@google/generative-ai');
+    const ai = new GoogleGenerativeAI(apiKey);
     const systemInstruction = customPrompt && customPrompt.trim().length > 20 
-      ? `${customPrompt}\n\nIMPORTANTE: NUNCA uses signos de apertura (¡ o ¿). Sé conciso (1-2 oraciones cortas).`
+      ? `${customPrompt}\n\nIMPORTANTE: NUNCA uses signos de apertura (¡ o ¿) ni puntos finales. Sé conciso (1-2 oraciones cortas)`
       : GEMINI_SYSTEM_INSTRUCTION;
-
-    const model = ai.getGenerativeModel({
-      model: 'gemini-1.5-flash',
-      systemInstruction
-    });
 
     const promptContext = branchName && branchName !== 'No especificada'
       ? `Sucursal identificada: ${branchName}`
       : `Sucursal: NO identificada (el usuario aún no dijo de qué local escribe)`;
 
-    const prompt = `${promptContext}\nMensaje de la sucursal: "${incomingText}"\nGenera una respuesta resolutiva y natural en 1 o 2 oraciones:`;
+    const prompt = `${promptContext}\nMensaje de la sucursal: "${incomingText}"\nGenera una respuesta resolutiva, experta y natural en 1 o 2 oraciones sin punto final:`;
     
-    // Timeout de seguridad de 4 segundos para que el bot nunca quede colgado
-    const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Gemini timeout')), 4000));
-    const result = await Promise.race([model.generateContent(prompt), timeoutPromise]);
-    
-    let text = result.response.text().trim();
-    // Limpieza de comillas, saltos de línea sobrantes o signos de apertura accidentales
-    text = text.replace(/^[¡¿"\s]+|[!"\s]+$/g, '').trim();
-    text = text.replace(/¡/g, '').replace(/¿/g, '');
-    if (text) return text;
+    const candidateModels = ['gemini-3.5-flash-lite', 'gemini-3.5-flash', 'gemini-3.1-flash-lite'];
+    for (const modelName of candidateModels) {
+      try {
+        const model = ai.getGenerativeModel({ model: modelName, systemInstruction });
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Gemini timeout')), 7000));
+        const result = await Promise.race([model.generateContent(prompt), timeoutPromise]);
+        if (result && result.response) {
+          const text = cleanHumanText(result.response.text());
+          if (text) return text;
+        }
+      } catch (e) {
+        console.warn(`[Gemini Ack Retry] ${modelName} falló: ${e.message}`);
+      }
+    }
   } catch (err) {
     console.warn('[Gemini AI Warning] No se pudo obtener respuesta de Gemini, usando fallback humano:', err.message);
   }
@@ -663,7 +702,84 @@ async function getGuardiaMentionResponse(context = {}) {
   };
 }
 
+
+// Historial de conversación continuo por chatId
+const chatMemory = new Map();
+
+function getChatHistory(chatId) {
+  if (!chatMemory.has(chatId)) {
+    chatMemory.set(chatId, []);
+  }
+  return chatMemory.get(chatId);
+}
+
+function addToChatHistory(chatId, role, text) {
+  const history = getChatHistory(chatId);
+  history.push({ role, parts: [{ text }] });
+  if (history.length > 20) {
+    history.splice(0, history.length - 20);
+  }
+}
+
+/**
+ * Genera una respuesta continua conversacional con Gemini recordando el hilo del chat.
+ */
+async function getContinuousChatResponse({ chatId, incomingText, senderName, chatTitle, isGroup, customPrompt, customApiKey }) {
+  const apiKey = customApiKey || process.env.GEMINI_API_KEY;
+  if (!apiKey) return null;
+
+  try {
+    const { GoogleGenerativeAI } = require('@google/generative-ai');
+    const ai = new GoogleGenerativeAI(apiKey);
+    const systemInstruction = customPrompt && customPrompt.trim().length > 20
+      ? `${customPrompt}\n\nIMPORTANTE: NUNCA uses signos de apertura (¡ o ¿). Sé conciso (1-2 oraciones cortas). Hablá de forma fluida y natural.`
+      : GEMINI_SYSTEM_INSTRUCTION;
+
+    const branchName = detectBranch(incomingText, chatTitle) || 'No especificada';
+    const history = getChatHistory(chatId);
+    const isProcesosGroup = isGroup && normalizeText(chatTitle).includes('procesos');
+    const groupInstruction = isProcesosGroup
+      ? ' (NOTA OBLIGATORIA: Estás en el grupo principal "Procesos - Mi Gusto". Asegurale brevemente que vamos a revisar el tema y que lo molestamos por privado para resolverlo, para no llenar el grupo de mensajes)'
+      : (isGroup ? ' (NOTA: Estás en un grupo general. Asegurale como siempre que enseguida revisamos el tema y avisamos, o dale el tip directo)' : '');
+
+    const userMessage = isGroup
+      ? `[${senderName} en grupo "${chatTitle}" - Sucursal: ${branchName}${groupInstruction}]: ${incomingText}`
+      : `[${senderName} en privado]: ${incomingText}`;
+
+    // Lista de modelos disponibles con fallback automático si uno tiene alta demanda (503)
+    const candidateModels = ['gemini-3.5-flash-lite', 'gemini-3.5-flash', 'gemini-3.1-flash-lite'];
+    let result = null;
+
+    for (const modelName of candidateModels) {
+      try {
+        const model = ai.getGenerativeModel({ model: modelName, systemInstruction });
+        const chat = model.startChat({ history: history.slice() });
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Gemini timeout')), 7000));
+        result = await Promise.race([chat.sendMessage(userMessage), timeoutPromise]);
+        if (result && result.response) break;
+      } catch (errRetry) {
+        console.warn(`[Gemini Retry] Modelo ${modelName} falló: ${errRetry.message}. Probando siguiente...`);
+      }
+    }
+
+    if (!result || !result.response) return null;
+    let text = cleanHumanText(result.response.text());
+
+    if (text) {
+      // Guardar en memoria para el próximo turno
+      addToChatHistory(chatId, 'user', userMessage);
+      addToChatHistory(chatId, 'model', text);
+      return { text, detectedBranch: branchName };
+    }
+  } catch (err) {
+    console.warn('[Gemini Continuous Warning]:', err.message);
+  }
+  return null;
+}
+
 module.exports = {
+  getContinuousChatResponse,
+  addToChatHistory,
   isWithinWorkingHours,
   shouldAlertTech,
   checkWeeklyAutoRotation,
