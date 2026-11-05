@@ -79,7 +79,7 @@ export default function ActivityFeed({ activityLog, onClearView }) {
   // Filter messages
   const filteredActivities = activityLog.filter(item => {
     // Filter by type
-    if (filterType === 'incoming' && item.type !== 'incoming') return false;
+    if (filterType === 'incoming' && item.type !== 'incoming' && item.type !== 'outgoing') return false;
     if (filterType === 'system' && item.type !== 'system') return false;
 
     // Filter by search
@@ -511,7 +511,7 @@ export default function ActivityFeed({ activityLog, onClearView }) {
                   </div>
                 </div>
 
-                {/* Bot Response Bubble (green WhatsApp bubble) */}
+                {/* Bot / Manual Response Bubble (green WhatsApp bubble) */}
                 {item.response && (
                   <div style={{
                     display: 'flex',
@@ -520,9 +520,13 @@ export default function ActivityFeed({ activityLog, onClearView }) {
                     marginTop: '2px'
                   }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '3px' }}>
-                      <Bot size={12} color="var(--wa-green)" />
+                      {item.responder === 'human' ? (
+                        <User size={12} color="var(--wa-green)" />
+                      ) : (
+                        <Bot size={12} color="var(--wa-green)" />
+                      )}
                       <span style={{ fontSize: '11px', fontWeight: '600', color: 'var(--wa-green)' }}>
-                        Respuesta del Bot:
+                        {item.responder === 'human' ? 'Respuesta Manual (Guardia):' : 'Respuesta del Bot:'}
                       </span>
                     </div>
                     <div style={{

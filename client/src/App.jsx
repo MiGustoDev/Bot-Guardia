@@ -78,6 +78,14 @@ function App() {
       setActivityLog(prev => [newLogItem, ...prev]);
     });
 
+    // Real-time update of an existing message card (e.g. when bot or human replies)
+    socket.on('activity-update', (updatedItem) => {
+      if (!updatedItem || !updatedItem.id) return;
+      setActivityLog(prev =>
+        prev.map(item => (item.id === updatedItem.id ? updatedItem : item))
+      );
+    });
+
     // Real-time history dump on reconnect
     socket.on('activity-history', (history) => {
       if (Array.isArray(history) && history.length > 0) {

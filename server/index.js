@@ -97,19 +97,69 @@ function writeConfig(config) {
 }
 
 // Log helper
-function logActivity(type, from, text, response, success = true) {
+function logActivity(type, from, text, response, success = true, extra = {}) {
   const logItem = {
     id: Date.now().toString() + Math.random().toString(36).substr(2, 5),
     timestamp: new Date().toLocaleTimeString(),
-    type, // 'incoming' | 'system'
+    createdAtMs: Date.now(),
+    type, // 'incoming' | 'outgoing' | 'system'
     from,
     text,
     response,
-    success
+    success,
+    ...extra
   };
   activityLog.unshift(logItem);
-  if (activityLog.length > 100) activityLog.pop();
+  if (activityLog.length > 300) activityLog.pop();
   io.emit('activity', logItem);
+  return logItem;
+}
+
+function updateActivityItem(id, patch = {}) {
+  if (!id) return null;
+  const item = activityLog.find(entry => entry.id === id);
+  if (!item) return null;
+  Object.assign(item, patch);
+  io.emit('activity-update', item);
+  return item;
+}
+
+function attachManualReplyToChat(chatId, replyText, fallbackLabel = 'Guardia (Manual)') {
+  if (!replyText) return;
+  const recentItem = activityLog.find(
+    entry =>
+      entry.type === 'incoming' &&
+      entry.chatId === chatId &&
+      Date.now() - (entry.createdAtMs || 0) < 60 * 60 * 1000
+  );
+  if (recentItem && !recentItem.response) {
+    updateActivityItem(recentItem.id, {
+      response: replyText,
+      responder: 'human'
+    });
+  } else {
+    const label = recentItem ? recentItem.from : fallbackLabel;
+    logActivity('incoming', label, recentItem ? recentItem.text : '(Mensaje directo saliente)', replyText, true, {
+      chatId,
+      responder: 'human'
+    });
+  }
+}
+
+function formatWhatsAppMessageBody(msg) {
+  const raw = (msg.body || '').trim();
+  const type = msg.type || '';
+  if (msg.hasMedia || !raw) {
+    if (type === 'image') return raw ? `📷 [Imagen] ${raw}` : '📷 [Imagen]';
+    if (type === 'ptt' || type === 'audio') return '🎵 [Audio / Nota de voz]';
+    if (type === 'video') return raw ? `🎥 [Video] ${raw}` : '🎥 [Video]';
+    if (type === 'document') return raw ? `📄 [Documento] ${raw}` : '📄 [Documento]';
+    if (type === 'sticker') return '🏷️ [Sticker]';
+    if (type === 'location') return '📍 [Ubicación]';
+    if (type === 'vcard' || type === 'multi_vcard') return '👤 [Contacto adjunto]';
+    if (!raw && msg.hasMedia) return '📎 [Archivo multimedia]';
+  }
+  return raw;
 }
 
 // Update Status helper
@@ -235,15 +285,39 @@ function initWhatsApp() {
 
   client.on('message_create', async (msg) => {
     try {
-      const rawText = (msg.body || '').trim();
-      if (!rawText) return;
       if (msg.from === 'status@broadcast' || msg.to === 'status@broadcast') return;
+      const displayText = formatWhatsAppMessageBody(msg);
+      const rawText = (msg.body || '').trim();
+      if (!displayText) return;
 
       // A) SI EL MENSAJE SALIÓ DE LA PROPIA CUENTA DEL TELÉFONO DE GUARDIA (msg.fromMe)
       if (msg.fromMe) {
         // Si no fue generado por el código del bot, significa que Facu o Ramiro respondieron manualmente desde el celular o WhatsApp Web
-        if (!knowledge.isBotGeneratedOutput(rawText)) {
+        if (!knowledge.isBotGeneratedOutput(rawText) && !knowledge.isBotGeneratedOutput(displayText)) {
           const targetChatId = msg.to || msg.from;
+          const isTargetGroup = targetChatId.endsWith('@g.us');
+          const cleanCmd = rawText.trim().toLowerCase();
+
+          // Permitir reactivar el bot manualmente en un chat privado enviando #bot o #activar
+          if (!isTargetGroup && (cleanCmd === '#bot' || cleanCmd === '#activar')) {
+            knowledge.clearHumanTakeover(targetChatId);
+            logActivity('system', '🤖 Bot Reactivado', `Chat: ${targetChatId.split('@')[0]}`, 'El bot volvió a modo automático en este chat privado');
+            return;
+          }
+
+          // Reflejar la respuesta manual en el monitor de mensajes en vivo de la vista web
+          attachManualReplyToChat(targetChatId, displayText, `Guardia Manual (${targetChatId.split('@')[0]})`);
+
+          // En chats privados: si el técnico manda un mensaje manual, el bot le cede el control de la conversación
+          if (!isTargetGroup) {
+            const wasAlreadyManual = knowledge.isChatUnderHumanControl(targetChatId);
+            knowledge.markHumanTakeover(targetChatId);
+            if (rawText) knowledge.addToChatHistory(targetChatId, 'model', rawText);
+            if (!wasAlreadyManual) {
+              logActivity('system', '👤 Control Manual Activo', `Chat privado tomado (${targetChatId.split('@')[0]})`, `El bot pausa sus respuestas automáticas en este chat para que sigas vos: "${displayText}"`);
+            }
+          }
+
           let quotedQuestion = '';
           try {
             if (msg.hasQuotedMsg) {
@@ -252,26 +326,62 @@ function initWhatsApp() {
             }
           } catch (_) {}
 
-          const learned = knowledge.learnFromHumanReply(targetChatId, rawText, quotedQuestion, 'Guardia Manual');
-          if (learned) {
-            knowledge.addToChatHistory(targetChatId, 'model', rawText);
-            logActivity('system', '🧠 Auto-Entrenamiento', quotedQuestion || 'Respuesta manual detectada', `Aprendido: "${rawText}"`);
+          if (rawText) {
+            const learned = knowledge.learnFromHumanReply(targetChatId, rawText, quotedQuestion, 'Guardia Manual');
+            if (learned) {
+              if (isTargetGroup) {
+                knowledge.addToChatHistory(targetChatId, 'model', rawText);
+              }
+              logActivity('system', '🧠 Auto-Entrenamiento', quotedQuestion || 'Respuesta manual detectada', `Aprendido: "${rawText}"`);
+            }
           }
         }
         return;
       }
 
+      const fromNumber = msg.from;
+      const isGroup = fromNumber.endsWith('@g.us');
+      const incomingText = rawText || displayText;
+
+      // Resolver remitente y nombre del grupo/chat de inmediato para mostrar TODOS los mensajes en la vista web
+      let senderName = (msg._data && msg._data.notifyName) ? msg._data.notifyName : fromNumber.split('@')[0];
+      let chatTitle = isGroup ? 'Grupo' : 'Privado';
+      let chat = null;
+      try {
+        const [contactRes, chatRes] = await Promise.all([
+          msg.getContact().catch(() => null),
+          msg.getChat().catch(() => null)
+        ]);
+        if (contactRes) {
+          senderName = contactRes.pushname || contactRes.name || senderName;
+        }
+        if (chatRes) {
+          chat = chatRes;
+          if (isGroup) {
+            chatTitle = chatRes.name || 'Grupo';
+          }
+        }
+      } catch (e) {
+        console.error('Error fetching contact/chat info:', e);
+      }
+
+      // REGISTRAR SIEMPRE EN TIEMPO REAL TODOS LOS MENSAJES ENTRANTES EN EL MONITOR DE LA VISTA WEB
+      const incomingLogItem = logActivity(
+        'incoming',
+        `${senderName} (${chatTitle})`,
+        displayText,
+        '',
+        true,
+        { chatId: fromNumber, isGroup }
+      );
+
+      console.log(`[Message Received] [${chatTitle}] From: ${senderName} (${fromNumber}): ${displayText}`);
+
       const config = readConfig();
       if (!config.botEnabled) return;
 
-      // Ignorar estados de WhatsApp
-      if (msg.from === 'status@broadcast') return;
-
-      const incomingText = (msg.body || '').trim();
-      if (!incomingText) return;
-
-      const fromNumber = msg.from;
-      const isGroup = fromNumber.endsWith('@g.us');
+      // Si es solo un archivo multimedia sin texto ni mención, ya quedó visible en el panel web
+      if (!rawText) return;
 
       // Obtener identificadores del bot para verificar menciones
       const myWid = client.info?.wid?._serialized || '';
@@ -332,29 +442,23 @@ function initWhatsApp() {
 
       // Registrar siempre el mensaje entrante del usuario/sucursal para tener el contexto si un técnico le responde manualmente después
       if (!isAuthorTech) {
-        knowledge.recordIncomingForLearning(fromNumber, incomingText);
+        knowledge.recordIncomingForLearning(fromNumber, incomingText, senderName);
+      }
+
+      // Si es un grupo y NO nos arrobaron, guardamos el mensaje en el buffer de contexto del grupo
+      // (por si una sucursal reportó un problema sin arrobarnos y enseguida nos arroba una supervisora de tienda)
+      if (isGroup && !isAuthorTech && !isMentioned) {
+        knowledge.recordGroupMessageContext(fromNumber, {
+          senderId: msg.author || msg.from,
+          senderName,
+          text: incomingText
+        });
       }
 
       // Si es un grupo y config.onlyOnMention está activo, solo responder si fue mencionado
       if (isGroup && config.onlyOnMention && !isMentioned) {
         return;
       }
-
-      let senderName = 'Usuario';
-      let chatTitle = isGroup ? 'Grupo' : 'Directo';
-      let chat = null;
-      try {
-        const contact = await msg.getContact();
-        senderName = contact.pushname || contact.name || fromNumber.split('@')[0];
-        chat = await msg.getChat();
-        if (isGroup && chat) {
-          chatTitle = chat.name || 'Grupo';
-        }
-      } catch (e) {
-        console.error('Error fetching contact/chat info:', e);
-      }
-
-      console.log(`[Message Received] [${chatTitle}] From: ${senderName} (${fromNumber}): ${incomingText}`);
 
       // 0. Si es mensaje privado, chequear comandos técnicos primero (#ping, #guardia, etc.)
       if (!isGroup) {
@@ -363,7 +467,16 @@ function initWhatsApp() {
           knowledge.registerBotOutput(commandReply);
           await msg.reply(commandReply);
           console.log(`[Tech Command / Assignment] Respondido: ${commandReply}`);
-          logActivity('outgoing', 'Bot (Comando Técnico)', incomingText, commandReply);
+          updateActivityItem(incomingLogItem.id, { response: commandReply, responder: 'bot' });
+          return;
+        }
+
+        // 0.5. CONTROL MANUAL (HANDOFF HUMANO EN PRIVADO):
+        // Si un técnico ya contestó manualmente en este chat privado, el bot le deja la conversación al humano
+        // sin interrumpir, mientras sigue registrando los mensajes para auto-entrenarse.
+        if (knowledge.isChatUnderHumanControl(fromNumber)) {
+          knowledge.addToChatHistory(fromNumber, 'user', `[${senderName} en privado]: ${incomingText}`);
+          console.log(`[Control Manual] Chat con ${senderName} (${fromNumber}) bajo atención manual del técnico. El bot cede el turno.`);
           return;
         }
       }
@@ -379,14 +492,63 @@ function initWhatsApp() {
       const chatId = msg.from;
       const targetChat = chat || (await msg.getChat().catch(() => null));
 
+      // 1.5. Si estamos en un grupo, detectar si quien nos arrobó fue una SUPERVISORA DE TIENDA o la SUCURSAL directamente
+      let incidentTarget = {
+        isSupervisor: false,
+        targetSenderId: msg.author || msg.from,
+        targetSenderName: senderName,
+        detectedBranch: '',
+        effectiveProblemText: incomingText
+      };
+
+      if (isGroup) {
+        let quotedMsgData = null;
+        try {
+          if (msg.hasQuotedMsg) {
+            const quoted = await msg.getQuotedMessage();
+            if (quoted) {
+              let qSenderName = (quoted._data && quoted._data.notifyName) || '';
+              try {
+                const qContact = await quoted.getContact().catch(() => null);
+                if (qContact) qSenderName = qContact.pushname || qContact.name || qSenderName;
+              } catch (_) {}
+              quotedMsgData = {
+                senderId: quoted.author || quoted.from,
+                senderName: qSenderName,
+                text: (quoted.body || '').trim()
+              };
+            }
+          }
+        } catch (_) {}
+
+        incidentTarget = knowledge.resolveGroupIncidentTarget({
+          groupChatId: fromNumber,
+          mentionSenderId: msg.author || msg.from,
+          mentionSenderName: senderName,
+          incomingText,
+          quotedMsgData
+        });
+
+        // Si el mensaje fue de una sucursal (no supervisora), también lo dejamos en el buffer del grupo
+        if (!incidentTarget.isSupervisor && !isAuthorTech) {
+          knowledge.recordGroupMessageContext(fromNumber, {
+            senderId: msg.author || msg.from,
+            senderName,
+            text: incomingText
+          });
+        }
+      }
+
       // 2. FUNCIÓN DE RESPUESTA CONTINUA CON GEMINI
       if (config.geminiEnabled && geminiApiKey) {
         const continuousRes = await knowledge.getContinuousChatResponse({
           chatId,
-          incomingText,
+          incomingText: incidentTarget.effectiveProblemText || incomingText,
           senderName,
           chatTitle,
           isGroup,
+          isSupervisor: incidentTarget.isSupervisor,
+          detectedBranchOverride: incidentTarget.detectedBranch,
           customPrompt: geminiPrompt,
           customApiKey: geminiApiKey
         });
@@ -420,31 +582,60 @@ function initWhatsApp() {
           }
 
           console.log(`[Gemini Continuo] Respondido a ${chatTitle} (${senderName}): "${continuousRes.text}"`);
-          logActivity('incoming', `${senderName} (${chatTitle})`, incomingText, continuousRes.text);
+          updateActivityItem(incomingLogItem.id, { response: continuousRes.text, responder: 'bot' });
 
-          // Si fue en el grupo "Procesos - Mi Gusto", abrirle conversación por privado al remitente
+          // Si fue en el grupo principal de Operaciones / Procesos ("Procesos - Mi Gusto"),
+          // abrirle conversación por privado a la SUCURSAL (NUNCA a la supervisora si nos arrobó una supervisora)
           try {
-            const isProcesosGroup = isGroup && chatTitle.toLowerCase().includes('procesos');
-            const senderId = msg.author || msg.from;
-            if (isProcesosGroup && senderId) {
-              const cleanSenderId = senderId.split('@')[0];
-              const techPhones = [
-                knowledge.TECNICOS.ramiro.phone,
-                knowledge.TECNICOS.facu.phone,
-                '3876117799',
-                '1163704522'
-              ];
-              const isSenderTech = techPhones.some(t => cleanSenderId.includes(t) || t.includes(cleanSenderId)) ||
-                senderName.toLowerCase().includes('facu') || senderName.toLowerCase().includes('rami');
+            const isMainOpsGroup = isGroup && knowledge.isMainOperationsGroup(chatTitle);
+            if (isMainOpsGroup) {
+              let targetBranchJid = incidentTarget.targetSenderId;
+              let targetBranchLabel = incidentTarget.targetSenderName || senderName;
 
-              if (!isSenderTech) {
-                await sleep(2000);
-                const privGreeting = `buenas ${senderName}, te escribo por acá por lo que comentaste en el grupo de Procesos así no llenamos el grupo de mensajes, contame bien qué pasó o pasame foto/AnyDesk y lo vemos`;
-                knowledge.registerBotOutput(privGreeting);
-                await client.sendMessage(senderId, privGreeting);
-                knowledge.addToChatHistory(senderId, 'user', `[Contexto del grupo ${chatTitle}]: ${incomingText}`);
-                knowledge.addToChatHistory(senderId, 'model', privGreeting);
-                console.log(`[Privado desde Procesos] Iniciado chat privado con ${senderName} (${senderId})`);
+              // Si arrobó una supervisora y la sucursal no había escrito antes en el grupo (targetBranchJid === null),
+              // buscamos entre los chats de WhatsApp el contacto privado de esa sucursal por nombre
+              if (incidentTarget.isSupervisor && !targetBranchJid && incidentTarget.detectedBranch && incidentTarget.detectedBranch !== 'No especificada') {
+                try {
+                  const allChats = await client.getChats();
+                  const normBr = incidentTarget.detectedBranch.toLowerCase();
+                  const foundBranchChat = allChats.find(
+                    c => !c.isGroup && c.name && c.name.toLowerCase().includes(normBr)
+                  );
+                  if (foundBranchChat && foundBranchChat.id && foundBranchChat.id._serialized) {
+                    targetBranchJid = foundBranchChat.id._serialized;
+                    targetBranchLabel = foundBranchChat.name;
+                  }
+                } catch (_) {}
+              }
+
+              if (targetBranchJid) {
+                const cleanTargetId = targetBranchJid.split('@')[0];
+                const techPhones = [
+                  knowledge.TECNICOS.ramiro.phone,
+                  knowledge.TECNICOS.facu.phone,
+                  '3876117799',
+                  '1163704522'
+                ];
+                const isTargetTech = techPhones.some(t => cleanTargetId.includes(t) || t.includes(cleanTargetId)) ||
+                  targetBranchLabel.toLowerCase().includes('facu') || targetBranchLabel.toLowerCase().includes('rami');
+
+                if (!isTargetTech) {
+                  await sleep(2000);
+                  // Asegurar que el bot esté activo en el chat privado de la sucursal para mantener la charla continua
+                  knowledge.clearHumanTakeover(targetBranchJid);
+                  const privGreeting = incidentTarget.isSupervisor
+                    ? `buenas, como va? les escribimos de Sistemas por lo que reportaron en el grupo de Procesos así no llenamos de mensajes allá, contanos bien qué pasó o pasanos foto/AnyDesk y lo vemos`
+                    : `buenas ${targetBranchLabel}, te escribo por acá por lo que comentaste en el grupo así no llenamos de mensajes allá, contame bien qué pasó o pasame foto/AnyDesk y lo vemos`;
+
+                  knowledge.registerBotOutput(privGreeting);
+                  await client.sendMessage(targetBranchJid, privGreeting);
+                  knowledge.addToChatHistory(targetBranchJid, 'user', `[Contexto del grupo ${chatTitle}]: ${incidentTarget.effectiveProblemText}`);
+                  knowledge.addToChatHistory(targetBranchJid, 'model', privGreeting);
+                  logActivity('outgoing', `Bot ➔ ${targetBranchLabel} (Privado)`, `Derivado desde ${chatTitle}`, privGreeting, true, { chatId: targetBranchJid });
+                  console.log(`[Privado desde Grupo Principal] Iniciado chat privado con sucursal ${targetBranchLabel} (${targetBranchJid}) [Arrobó supervisora: ${incidentTarget.isSupervisor}]`);
+                }
+              } else if (incidentTarget.isSupervisor) {
+                console.log(`[Privado desde Grupo Principal] Arrobó supervisora (${senderName}), se evitó hablarle por privado a ella (sucursal aún no escribió en el grupo).`);
               }
             }
           } catch (privErr) {
@@ -493,6 +684,7 @@ function initWhatsApp() {
         for (let i = 0; i < responsePlan.messages.length; i++) {
           const step = responsePlan.messages[i];
           await sleep(step.delayBefore || 1500);
+          knowledge.registerBotOutput(step.text);
           if (step.isReply) {
             await msg.reply(step.text);
           } else {
@@ -503,7 +695,7 @@ function initWhatsApp() {
             }
           }
         }
-        logActivity('incoming', `${senderName} en ${chatTitle}`, incomingText, responsePlan.summaryText);
+        updateActivityItem(incomingLogItem.id, { response: responsePlan.summaryText, responder: 'bot' });
         return;
       }
 

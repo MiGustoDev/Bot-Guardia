@@ -627,13 +627,17 @@ MANUAL OPERATIVO DE RESOLUCION TECNICA DE MI GUSTO (SEGUIR AL PIE DE LA LETRA):
    - Si tienen mal los precios en pantalla: 'quedate tranqui que enseguida les mandamos la actualización para corregir los precios de las pantallas'
 11. COMANDA DUPLICADA:
    - 'quedate tranqui, podés eliminar la segunda comanda sin problema porque con la primera ya queda registrado correctamente el pedido'
-12. PROVEEDOR DE SISTEMA:
+    12. PROVEEDOR DE SISTEMA:
    - Nuestro único proveedor de software gastronómico es Datalive (JAMAS menciones a Maxirest)
 13. ZONAS DE DELIVERY O MAPAS:
-   - Si piden modificar, ampliar, achicar o cambiar zonas de delivery o mapas de reparto, SIEMPRE pedir la confirmación/autorización de su supervisor antes de realizar cualquier cambio: 'para hacer cambios en las zonas de delivery o mapas necesitamos primero la confirmación de tu supervisor, pedile que nos autorice por acá y lo modificamos enseguida'
-14. COMPORTAMIENTO SEGUN EL GRUPO DE WHATSAPP:
-   - Si el mensaje viene del grupo 'Procesos - Mi Gusto' (grupo principal): para NO llenarlo de mensajes, respondé de forma ultra breve asegurando que ya vamos a revisar el tema y que le escribimos/molestamos por privado para resolverlo (ej: 'buenas, quedate tranqui que ya lo revisamos y te molestamos por privado para resolverlo')
-   - Si el mensaje viene de CUALQUIER OTRO GRUPO: respondé como siempre asegurando que enseguida revisamos el tema y les avisamos, o dándoles la solución directa
+   - Si piden modificar, ampliar, achicar o cambiar zonas de delivery o mapas de reparto, SIEMPRE pedir la confirmación/autorización de su supervisor (Damaris, Lidya, Selene, Martín Sastre, Elizabeth Colman o Evelyn Cedrón) antes de realizar cualquier cambio: 'para hacer cambios en las zonas de delivery o mapas necesitamos primero la confirmación de tu supervisor, pedile que nos autorice por acá y lo modificamos enseguida'
+14. COMPORTAMIENTO SEGUN EL GRUPO O CHAT PRIVADO (Y LISTA DE SUPERVISORAS DE TIENDA):
+   - Las supervisoras/es de tienda son: Damaris, Lidya, Selene, Martín Sastre, Elizabeth Colman y Evelyn Cedrón
+   - GRUPO PRINCIPAL DE OPERACIONES / PROCESOS ('Procesos - Mi Gusto' u 'Operaciones'):
+     * Si nos arroba directamente una SUCURSAL: respondé dejando asentado que se tomó el pedido/caso y que ya les hablamos por privado para resolverlo (ej: 'buenas, ahi tomamos el caso y te escribimos por privado para resolverlo')
+     * Si nos arroba una SUPERVISORA DE TIENDA (Damaris, Lidya, Selene, Martín Sastre, Elizabeth Colman o Evelyn Cedrón, avisando por una sucursal o citando el reclamo de una tienda): respondé dejando asentado que tomamos el caso y que ya nos comunicamos por privado DIRECTAMENTE CON LA SUCURSAL para resolverlo (ej: 'buenas, ahi tomamos el caso y ya le escribimos por privado a la sucursal para resolverlo')
+   - CUALQUIER OTRO GRUPO (que no sea Operaciones/Procesos): respondé SIEMPRE dejando asentado que se toma el caso y que ya lo estamos viendo/revisando (podés sumar el tip rápido si aplica). Ejemplo: 'buenas, ahi tomamos el caso y ya lo estamos viendo'
+   - CHAT PRIVADO (1 a 1): mantené una conversación continua, acertada, inteligente y super servicial. Respondé con inmediatez resolviendo dudas, guiando paso a paso o pidiendo los datos clave (sucursal, código de AnyDesk, captura de pantalla) para adelantar el trabajo hasta que el técnico de guardia tome el celular y continúe manualmente
 `;
 
 async function getGeminiAcknowledgement(incomingText = '', branchName = '', customPrompt = '', customApiKey = '') {
@@ -806,9 +810,259 @@ function addToChatHistory(chatId, role, text) {
 }
 
 /**
+ * Detecta si el grupo es el grupo principal de Operaciones / Procesos ("Procesos - Mi Gusto").
+ */
+function isMainOperationsGroup(chatTitle = '') {
+  const norm = normalizeText(chatTitle);
+  return norm.includes('procesos') || norm.includes('operaciones');
+}
+
+// ==========================================
+// 8.6. CONTROL DE INTERVENCIÓN HUMANA EN PRIVADO (HANDOFF)
+// ==========================================
+/**
+ * Cuando un técnico responde manualmente en un chat privado desde el celular de guardia,
+ * el bot le cede el control de esa conversación privada para no pisarse con el humano,
+ * pero sigue registrando y aprendiendo de todo lo que el técnico responde.
+ * Si pasan 2 horas sin actividad manual, el bot vuelve a quedar listo como primera línea.
+ */
+const manualTakeoverChats = new Map(); // chatId -> timestamp of last human manual message
+const HUMAN_TAKEOVER_DURATION_MS = 2 * 60 * 60 * 1000; // 2 horas de ventana de conversación manual
+
+function markHumanTakeover(chatId = '') {
+  if (!chatId || chatId.endsWith('@g.us')) return;
+  manualTakeoverChats.set(chatId, Date.now());
+}
+
+function clearHumanTakeover(chatId = '') {
+  if (!chatId) return;
+  manualTakeoverChats.delete(chatId);
+}
+
+function isChatUnderHumanControl(chatId = '') {
+  if (!chatId || chatId.endsWith('@g.us')) return false;
+  if (!manualTakeoverChats.has(chatId)) return false;
+  const lastManualTime = manualTakeoverChats.get(chatId);
+  if (Date.now() - lastManualTime >= HUMAN_TAKEOVER_DURATION_MS) {
+    manualTakeoverChats.delete(chatId);
+    return false;
+  }
+  return true;
+}
+
+// ==========================================
+// 8.7. DETECCIÓN INTELIGENTE SUPERVISORA DE TIENDA VS SUCURSAL EN GRUPOS
+// ==========================================
+/**
+ * Buffer por grupo de los últimos mensajes recibidos (inclusive los que NO nos arrobaron).
+ * Esto permite que cuando una sucursal reporta un problema sin arrobarnos y luego una
+ * supervisora nos arroba (citando o sin citar), el bot sepa exactamente cuál fue la sucursal
+ * que reportó el problema y le escriba por privado a la sucursal, NUNCA a la supervisora.
+ */
+const recentGroupMessages = new Map(); // groupChatId -> Array<{ senderId, senderName, text, detectedBranch, timestamp, isSupervisor }>
+
+// Lista oficial de Supervisoras/es de Tienda de Mi Gusto
+const SUPERVISORAS_TIENDA = [
+  'damaris',
+  'lidya',
+  'lidia',
+  'selene',
+  'martin sastre',
+  'sastre',
+  'elizabeth colman',
+  'elizabeth',
+  'colman',
+  'evelyn cedron',
+  'evelyn',
+  'cedron'
+];
+
+function isKnownSupervisorRole(senderName = '', text = '') {
+  const nameNorm = normalizeText(senderName);
+  const textNorm = normalizeText(text);
+
+  // 0. Coincidencia directa con la lista oficial de supervisoras de tienda (Damaris, Lidya, Selene, Martín Sastre, Elizabeth Colman, Evelyn Cedrón)
+  for (const sup of SUPERVISORAS_TIENDA) {
+    const regex = new RegExp(`\\b${sup}\\b`, 'i');
+    if (regex.test(nameNorm)) {
+      return true;
+    }
+  }
+
+  // 1. El nombre del contacto indica rol de supervisión / operaciones / coordinación
+  if (/\b(supervis\w*|operaciones|auditor\w*|coordinad\w*|gerent\w*|regional|lider|jefe)\b/i.test(nameNorm)) {
+    return true;
+  }
+
+  // 2. El texto habla en tercera persona pidiendo asistir a una tienda ("ayuden a", "escribanle a", "fijense lo de", "los chicos de", "tienen problema en")
+  if (/\b(ayud\w*\s+a|escrib\w*\s+a|comuniqu\w*\s+con|habl\w*\s+con|vean\s+lo\s+de|ven\s+lo\s+de|fijense\s+(lo\s+de|en|esto|arriba)|los\s+chicos\s+de|a\s+la\s+sucursal|al\s+local|tienen\s+problem\w*|no\s+les\s+(anda|funciona|imprime|aparece)|estan\s+sin\s+sistema)\b/i.test(textNorm)) {
+    return true;
+  }
+
+  // 3. El mensaje es únicamente el arroba o un llamado corto a mirar lo anterior (ej: "@sistemas", "@sistemas chicos ven esto porfa?")
+  const stripped = textNorm
+    .replace(/@\d{6,18}/g, '')
+    .replace(/@(sistemas|guardia)/g, '')
+    .replace(/\b(hola|buenas|buen\s+dia|buenas\s+tardes|buenas\s+noches|chicos|che|porfa|por\s+favor|gracias|fijense|vean|ven|miren|esto|arriba|aca|ahi)\b/g, '')
+    .replace(/[^a-z0-9]/g, '')
+    .trim();
+
+  if (stripped.length <= 6) {
+    return true;
+  }
+
+  return false;
+}
+
+function recordGroupMessageContext(groupChatId, { senderId, senderName, text }) {
+  if (!groupChatId || !senderId || !text) return;
+  const clean = text.trim();
+  if (!clean) return;
+
+  if (!recentGroupMessages.has(groupChatId)) {
+    recentGroupMessages.set(groupChatId, []);
+  }
+  const list = recentGroupMessages.get(groupChatId);
+  const branch = detectBranch(clean, senderName);
+  const supervisorFlag = isKnownSupervisorRole(senderName, clean);
+
+  list.unshift({
+    senderId,
+    senderName: senderName || senderId.split('@')[0],
+    text: clean,
+    detectedBranch: branch,
+    isSupervisor: supervisorFlag,
+    timestamp: Date.now()
+  });
+
+  if (list.length > 30) {
+    list.pop();
+  }
+}
+
+/**
+ * Resuelve quién es el destinatario real del soporte cuando arroban a la guardia en un grupo:
+ * - Si arrobó directamente la sucursal: devuelve { isSupervisor: false, targetSenderId: mentionSenderId, ... }
+ * - Si arrobó una supervisora de tienda (citando el mensaje de la sucursal, o arrobando después de que la sucursal escribió,
+ *   o pidiendo que asistamos a una sucursal): devuelve { isSupervisor: true, targetSenderId: <JID de la sucursal>, ... }
+ */
+function resolveGroupIncidentTarget({
+  groupChatId,
+  mentionSenderId,
+  mentionSenderName,
+  incomingText,
+  quotedMsgData = null
+}) {
+  const branchInMention = detectBranch(incomingText, '');
+  const branchInSenderName = detectBranch('', mentionSenderName);
+
+  // CASO 1: La supervisora citó (Reply) el mensaje de otra persona (la sucursal) al arrobarnos
+  if (quotedMsgData && quotedMsgData.senderId && quotedMsgData.senderId !== mentionSenderId) {
+    const quotedBranch =
+      detectBranch(quotedMsgData.text || '', quotedMsgData.senderName || '') ||
+      branchInMention ||
+      'No especificada';
+    return {
+      isSupervisor: true,
+      targetSenderId: quotedMsgData.senderId,
+      targetSenderName: quotedMsgData.senderName || (quotedBranch !== 'No especificada' ? `Sucursal ${quotedBranch}` : 'Sucursal'),
+      detectedBranch: quotedBranch,
+      effectiveProblemText: quotedMsgData.text
+        ? `${quotedMsgData.text} (Reportado en grupo y derivado por ${mentionSenderName}: "${incomingText}")`
+        : incomingText
+    };
+  }
+
+  const list = recentGroupMessages.get(groupChatId) || [];
+  const now = Date.now();
+  // Mensajes recientes (últimos 45 min) de OTROS participantes que no sean supervisores
+  const otherRecentMsgs = list.filter(
+    m => m.senderId !== mentionSenderId && !m.isSupervisor && now - m.timestamp < 45 * 60 * 1000
+  );
+
+  const looksLikeSupervisor = isKnownSupervisorRole(mentionSenderName, incomingText);
+
+  // CASO 2: Quien nos arroba parece ser una supervisora (o solo puso "@sistemas" para que leamos arriba)
+  if (looksLikeSupervisor) {
+    // 2a. Si la supervisora nombró una sucursal específica (ej: "@sistemas fijense lo de Urquiza")
+    if (branchInMention) {
+      const normBranch = normalizeText(branchInMention);
+      const matchedFromGroup = otherRecentMsgs.find(
+        m =>
+          (m.detectedBranch && normalizeText(m.detectedBranch) === normBranch) ||
+          normalizeText(m.senderName).includes(normBranch) ||
+          normalizeText(m.text).includes(normBranch)
+      );
+
+      if (matchedFromGroup) {
+        return {
+          isSupervisor: true,
+          targetSenderId: matchedFromGroup.senderId,
+          targetSenderName: matchedFromGroup.senderName,
+          detectedBranch: branchInMention,
+          effectiveProblemText: `${matchedFromGroup.text} (${incomingText})`
+        };
+      }
+
+      // La supervisora nombró a la sucursal pero la sucursal no había escrito antes en el grupo:
+      // targetSenderId queda en null para NO hablarle a la supervisora y buscar el chat privado de la sucursal por nombre
+      return {
+        isSupervisor: true,
+        targetSenderId: null,
+        targetSenderName: `Sucursal ${branchInMention}`,
+        detectedBranch: branchInMention,
+        effectiveProblemText: incomingText
+      };
+    }
+
+    // 2b. Si la supervisora NO nombró sucursal (ej: puso solo "@sistemas" o "@sistemas chicos ven esto porfa"),
+    // tomamos el mensaje inmediato anterior de una sucursal en el grupo
+    if (otherRecentMsgs.length > 0) {
+      const latestBranchMsg = otherRecentMsgs[0];
+      const resolvedBranch = latestBranchMsg.detectedBranch || detectBranch(latestBranchMsg.text, latestBranchMsg.senderName) || 'No especificada';
+      return {
+        isSupervisor: true,
+        targetSenderId: latestBranchMsg.senderId,
+        targetSenderName: latestBranchMsg.senderName,
+        detectedBranch: resolvedBranch,
+        effectiveProblemText: `${latestBranchMsg.text} (${incomingText})`
+      };
+    }
+
+    // Si es supervisora pero no hay mensaje previo ni sucursal detectada, igual marcamos isSupervisor=true para no abrirle privado a ella por error
+    return {
+      isSupervisor: true,
+      targetSenderId: null,
+      targetSenderName: 'Sucursal',
+      detectedBranch: 'No especificada',
+      effectiveProblemText: incomingText
+    };
+  }
+
+  // CASO 3: Nos arrobó directamente la sucursal
+  return {
+    isSupervisor: false,
+    targetSenderId: mentionSenderId,
+    targetSenderName: mentionSenderName,
+    detectedBranch: branchInMention || branchInSenderName || 'No especificada',
+    effectiveProblemText: incomingText
+  };
+}
+
+/**
  * Genera una respuesta continua conversacional con Gemini recordando el hilo del chat y lo aprendido.
  */
-async function getContinuousChatResponse({ chatId, incomingText, senderName, chatTitle, isGroup, customPrompt, customApiKey }) {
+async function getContinuousChatResponse({
+  chatId,
+  incomingText,
+  senderName,
+  chatTitle,
+  isGroup,
+  isSupervisor = false,
+  detectedBranchOverride = '',
+  customPrompt,
+  customApiKey
+}) {
   const apiKey = customApiKey || process.env.GEMINI_API_KEY;
   if (!apiKey) return null;
 
@@ -820,16 +1074,27 @@ async function getContinuousChatResponse({ chatId, incomingText, senderName, cha
       : GEMINI_SYSTEM_INSTRUCTION;
     const systemInstruction = baseSys + learnedBlock;
 
-    const branchName = detectBranch(incomingText, chatTitle) || 'No especificada';
+    const branchName = detectedBranchOverride || detectBranch(incomingText, `${senderName} ${chatTitle}`) || 'No especificada';
     const history = getChatHistory(chatId);
-    const isProcesosGroup = isGroup && normalizeText(chatTitle).includes('procesos');
-    const groupInstruction = isProcesosGroup
-      ? ' (NOTA OBLIGATORIA: Estás en el grupo principal "Procesos - Mi Gusto". Asegurale brevemente que vamos a revisar el tema y que lo molestamos por privado para resolverlo, para no llenar el grupo de mensajes)'
-      : (isGroup ? ' (NOTA: Estás en un grupo general. Asegurale como siempre que enseguida revisamos el tema y avisamos, o dale el tip directo)' : '');
+    const isMainOps = isGroup && isMainOperationsGroup(chatTitle);
+
+    let groupInstruction = '';
+    if (isMainOps) {
+      if (isSupervisor) {
+        const targetLabel = branchName && branchName !== 'No especificada' ? `la sucursal ${branchName}` : 'la sucursal';
+        groupInstruction = ` (NOTA OBLIGATORIA: Estás en el grupo principal "Procesos - Mi Gusto" y quien nos arrobó es una SUPERVISORA DE TIENDA avisándonos por ${targetLabel}. Respondé dejando asentado que tomamos el caso y que ya nos comunicamos por privado DIRECTAMENTE CON LA SUCURSAL para resolverlo, ej: "buenas, ahi tomamos el caso y ya le escribimos por privado a la sucursal para resolverlo")`;
+      } else {
+        groupInstruction = ' (NOTA OBLIGATORIA: Estás en el grupo principal de Operaciones "Procesos - Mi Gusto" y nos escribió la sucursal. Respondé dejando asentado que se tomó el pedido/caso y que ya le vamos a hablar por privado para resolverlo, para no llenar el grupo de mensajes)';
+      }
+    } else if (isGroup) {
+      groupInstruction = ' (NOTA OBLIGATORIA: Estás en un grupo que NO es operaciones. Respondé dejando asentado que se toma el caso y que ya lo estamos viendo/revisando, sumando un tip rápido si aplica)';
+    } else {
+      groupInstruction = ' (NOTA: Estás en chat privado 1 a 1. Respondé con inmediatez de forma acertada, inteligente y super servicial para mantener la conversación fluida y adelantar el diagnóstico o solución hasta que el técnico tome el celular)';
+    }
 
     const userMessage = isGroup
       ? `[${senderName} en grupo "${chatTitle}" - Sucursal: ${branchName}${groupInstruction}]: ${incomingText}`
-      : `[${senderName} en privado]: ${incomingText}`;
+      : `[${senderName} en privado - Sucursal: ${branchName}${groupInstruction}]: ${incomingText}`;
 
     const candidateModels = getOrderedCandidateModels();
     let result = null;
@@ -1095,6 +1360,12 @@ module.exports = {
   readLearnedMemory,
   getContinuousChatResponse,
   addToChatHistory,
+  isMainOperationsGroup,
+  recordGroupMessageContext,
+  resolveGroupIncidentTarget,
+  markHumanTakeover,
+  clearHumanTakeover,
+  isChatUnderHumanControl,
   isWithinWorkingHours,
   shouldAlertTech,
   checkWeeklyAutoRotation,
