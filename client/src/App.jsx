@@ -130,8 +130,13 @@ function App() {
     }
   };
 
-  const handleClearView = () => {
+  const handleClearView = async () => {
     setActivityLog([]);
+    try {
+      await fetch(`${SOCKET_URL}/api/activity`, { method: 'DELETE' });
+    } catch (err) {
+      console.error('Error clearing activity log from server:', err);
+    }
   };
 
   return (

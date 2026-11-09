@@ -190,31 +190,51 @@ function splitIntoHumanBubbles(text = '') {
 }
 
 /**
- * Simula el tiempo humano de lectura del mensaje recibido y el estado "escribiendo..." en WhatsApp
- * proporcional al largo del mensaje de respuesta (~130ms por carácter, mín 6.5s, máx 24s),
- * manteniendo activo sendStateTyping().
- * Devuelve false si durante el tipeo un humano tomó el control manual desde el celu de la guardia.
+ * Simula el tiempo humano de lectura del mensaje recibido y el estado "escribiendo..." en WhatsApp.
+ * Por solicitud operativa, se aplica una pausa mínima total de ~40 segundos (40s - 48s) antes de responder,
+ * dividida entre:
+ * 1. Pausa inicial realista de "notificación / lectura / ver el mensaje" (20s a 26s).
+ * 2. Tipeo activo en WhatsApp ("escribiendo..." vía sendStateTyping) de 20s a 24s.
+ * Si durante cualquier momento de esta espera un humano contesta desde el celu de guardia, se cancela de inmediato.
+ */
+/**
+ * Simula el tiempo humano de respuesta de exactamente ~50 segundos:
+ * 1. Pausa de lectura y espera previa (~28s a 32s).
+ * 2. Tipeo activo en WhatsApp ("escribiendo..." vía sendStateTyping) (~18s a 22s),
+ * sumando un total exacto de ~50 segundos antes de enviar el mensaje.
+ * Si durante cualquier momento un humano contesta desde el celular de guardia, se cancela al instante.
  */
 async function simulateHumanReadingAndTyping(targetChat, incomingText = '', outgoingText = '', chatId = '', isFirstBubble = true) {
-  // 1. Pausa humana para abrir y leer el mensaje recibido (4.2s a 6.2s en la primera burbuja, 2.2s a 3.2s entre burbujas)
+  // 1. Pausa de espera/lectura previa (~30s para la 1ra burbuja, 3s entre burbujas adicionales)
   const readingMs = isFirstBubble
-    ? Math.min(Math.max(3800 + (incomingText || '').length * 30, 4200), 6200)
-    : 2400 + Math.floor(Math.random() * 900);
+    ? 29000 + Math.floor(Math.random() * 3000)
+    : 2500 + Math.floor(Math.random() * 1000);
 
-  await sleep(readingMs);
+  const readingStepMs = 1000;
+  let readingElapsed = 0;
+  while (readingElapsed < readingMs) {
+    if (chatId && knowledge.isChatUnderHumanControl(chatId)) {
+      return false;
+    }
+    const chunk = Math.min(readingStepMs, readingMs - readingElapsed);
+    await sleep(chunk);
+    readingElapsed += chunk;
+  }
 
   if (chatId && knowledge.isChatUnderHumanControl(chatId)) {
     return false;
   }
 
+  // Marcar como visto tras haberlo "leído"
   if (isFirstBubble && targetChat && typeof targetChat.sendSeen === 'function') {
     await withTimeout(targetChat.sendSeen(), 700, null);
   }
 
-  // 2. Duración realista de tipeo en celular según largo de la respuesta (~130ms por letra, mín 6.5s, máx 24s)
-  const jitter = Math.floor(Math.random() * 1500);
-  const totalTypingMs = Math.min(Math.max((outgoingText || '').length * 130 + jitter, 6500), 24000);
-  const stepMs = 2500;
+  // 2. Duración de tipeo activo ("escribiendo..." en WhatsApp): ~20 segundos en la 1ra burbuja para completar los 50s totales
+  const totalTypingMs = isFirstBubble
+    ? 19000 + Math.floor(Math.random() * 3000)
+    : 4000 + Math.floor(Math.random() * 2000);
+  const stepMs = 2000;
   let elapsed = 0;
 
   while (elapsed < totalTypingMs) {
@@ -459,6 +479,12 @@ function initWhatsApp() {
       const config = readConfig();
       if (!config.botEnabled) return;
 
+      // REGLA CRITICA: El bot NUNCA debe responder ni escribir en el grupo interno de Sistemas
+      if (isGroup && knowledge.isInternalSystemsGroup(fromNumber, chatTitle, config.internalSystemsGroupIds)) {
+        console.log(`[Grupo Sistemas Interno] Mensaje en grupo de Sistemas (${chatTitle} - ${fromNumber}). El bot tiene estrictamente prohibido responder aquí.`);
+        return;
+      }
+
       // Si es solo un archivo multimedia sin texto ni mención, ya quedó visible en el panel web
       if (!rawText) return;
 
@@ -504,77 +530,35 @@ function initWhatsApp() {
       if (!isMentioned && myLidUser && incomingText.includes(`@${myLidUser}`)) {
         isMentioned = true;
       }
-      if (!isMentioned && (incomingText.toLowerCase().includes('@sistemas') || incomingText.toLowerCase().includes('@guardia') || /@\d{8,16}/.test(incomingText))) {
+      if (!isMentioned && (incomingText.toLowerCase().includes('@sistemas') || incomingText.toLowerCase().includes('@guardia'))) {
         isMentioned = true;
       }
 
-      // Si en un grupo nos vuelven a arrobar explícitamente para un caso nuevo, liberamos cualquier pausa previa del grupo
+      // Si en un grupo nos vuelven a arrobar explícitamente para un caso nuevo, liberamos cualquier pausa previa del grupo y reseteamos turnos
       if (isGroup && isMentioned) {
         knowledge.clearHumanTakeover(fromNumber);
+        knowledge.resetBotTurns(fromNumber);
       }
 
-      // Verificar si este chat ya viene manteniendo una conversación activa con el bot
-      // (o si respondió/citó directamente un mensaje del bot), siempre que un humano no haya tomado el control con el celu de la guardia
-      const senderJid = msg.author || msg.from;
-      let isActiveBotThread = knowledge.isConversationActiveForSender(fromNumber, senderJid);
-      if (!isActiveBotThread && msg.hasQuotedMsg && !knowledge.isChatUnderHumanControl(fromNumber)) {
-        try {
-          const quotedCheck = await withTimeout(msg.getQuotedMessage(), 1000, null);
-          if (quotedCheck && quotedCheck.fromMe) {
-            isActiveBotThread = true;
-          }
-        } catch (_) {}
-      }
-
-      // Verificar si quien escribe en un grupo desde su número personal es Facu o Ramiro respondiendo (citando) a una sucursal
-      const cleanAuthorId = (msg.author || msg.from || '').split('@')[0];
-      const isPersonalTechAccount =
-        cleanAuthorId.includes('1163704522') ||
-        cleanAuthorId.includes('3876117799') ||
-        /\b(facu|facundo|ramiro|rami)\b/i.test(senderName);
-
-      if (
-        isGroup &&
-        isPersonalTechAccount &&
-        !isMentioned &&
-        msg.hasQuotedMsg &&
-        !incomingText.includes('?') &&
-        chatTitle.trim().toUpperCase() !== 'BOT'
-      ) {
-        try {
-          const quotedMsg = await withTimeout(msg.getQuotedMessage(), 1000, null);
-          if (quotedMsg && !quotedMsg.fromMe && quotedMsg.body) {
-            const learnedFromPersonal = knowledge.learnFromHumanReply(fromNumber, incomingText, quotedMsg.body, senderName);
-            if (learnedFromPersonal) {
-              logActivity('system', `🧠 Auto-Entrenamiento (${senderName})`, quotedMsg.body, `Aprendido: "${incomingText}"`);
-            }
-          }
-        } catch (_) {}
-      }
-
-      // Registrar siempre el mensaje entrante del usuario/sucursal para tener el contexto si un técnico le responde manualmente después
-      knowledge.recordIncomingForLearning(fromNumber, incomingText, senderName);
-
-      // Si es un grupo y NO nos arrobaron, guardamos el mensaje en el buffer de contexto del grupo
-      // (por si una sucursal reportó un problema sin arrobarnos y enseguida nos arroba una supervisora de tienda)
-      if (isGroup && !isMentioned) {
-        knowledge.recordGroupMessageContext(fromNumber, {
-          senderId: msg.author || msg.from,
-          senderName,
-          text: incomingText
-        });
-      }
-
-      // Si un humano ya intervino desde el celu de la guardia en este grupo, no responder automáticamente
-      if (isGroup && knowledge.isChatUnderHumanControl(fromNumber)) {
-        console.log(`[Control Manual] Grupo ${chatTitle} bajo atención manual desde el celu de guardia. El bot cede el turno.`);
+      // El bot SOLAMENTE responde la primera interacción. Si ya respondió en este chat o si un técnico tomó el control, no responder
+      if (knowledge.isChatUnderHumanControl(fromNumber)) {
         return;
       }
 
-      // Si es un grupo y config.onlyOnMention está activo:
-      // Responder si fue mencionado (@Sistemas) O si el chat ya tiene una conversación activa con el bot (salvo en Procesos donde sigue por privado)
-      const isMainOpsGroupCheck = isGroup && knowledge.isMainOperationsGroup(chatTitle);
-      if (isGroup && config.onlyOnMention && !isMentioned && (!isActiveBotThread || isMainOpsGroupCheck)) {
+      // Si el bot ya respondió 1 vez en este chat (o el chat ya está en curso), ceder totalmente el turno al equipo humano
+      if (knowledge.getBotTurnCount(fromNumber) >= 1) {
+        return;
+      }
+
+      // Si es un grupo, verificar si el mensaje requiere atención
+      const isMainOpsGroupCheck = isGroup && knowledge.isMainOperationsGroup(chatTitle, fromNumber);
+      
+      // REGLA ESTRICTA PARA EL GRUPO DE PROCESOS: ÚNICAMENTE responder si arroban a Sistemas / teléfono de guardia
+      if (isMainOpsGroupCheck && !isMentioned) {
+        return;
+      }
+
+      if (isGroup && config.onlyOnMention && !isMentioned) {
         return;
       }
 
@@ -608,6 +592,13 @@ function initWhatsApp() {
         if (knowledge.isChatUnderHumanControl(fromNumber)) {
           knowledge.addToChatHistory(fromNumber, 'user', `[${senderName} en privado]: ${incomingText}`);
           console.log(`[Control Manual] Chat con ${senderName} (${fromNumber}) bajo atención manual del técnico. El bot cede el turno.`);
+          return;
+        }
+
+        // Si ya completó la primera interacción, no responder más en privado para darles tiempo a intervenir manualmente
+        if (knowledge.getBotTurnCount(fromNumber) >= 1) {
+          knowledge.addToChatHistory(fromNumber, 'user', `[${senderName} en privado]: ${incomingText}`);
+          console.log(`[Límite 1 Mensaje] Chat privado con ${senderName} (${fromNumber}) ya tuvo su primera interacción del bot. Se cede el turno al equipo humano.`);
           return;
         }
       }
@@ -674,7 +665,7 @@ function initWhatsApp() {
 
         // Activar de inmediato el hilo de conversación continua en este chat (salvo en el grupo Procesos donde se traslada a privado)
         if (!isMainOpsGroupCheck) {
-          knowledge.startOrRefreshBotConversation(chatId, senderJid);
+          knowledge.startOrRefreshBotConversation(chatId, primaryMsg.author || primaryMsg.from);
         }
 
         // 1.5. Si estamos en un grupo, detectar si quien nos arrobó fue una SUPERVISORA DE TIENDA o la SUCURSAL directamente
@@ -771,10 +762,13 @@ function initWhatsApp() {
 
             console.log(`[Gemini Continuo] Respondido a ${primaryChatTitle} (${primarySenderName}): "${continuousRes.text}"`);
 
-            const isMainOpsGroup = isGroup && knowledge.isMainOperationsGroup(primaryChatTitle);
+            // Incrementar contador de respuestas del bot en esta conversación
+            const currentTurns = knowledge.incrementBotTurn(chatId);
+            console.log(`[Primera Interacción Bot] Respondido a ${primaryChatTitle} (${chatId}). Turnos: ${currentTurns}/1. El bot cede el turno al equipo humano.`);
+
+            const isMainOpsGroup = isGroup && knowledge.isMainOperationsGroup(primaryChatTitle, chatId);
             if (!isMainOpsGroup) {
-              // Refrescar el hilo activo de conversación continua tras terminar de enviar
-              knowledge.startOrRefreshBotConversation(chatId, primaryMsg.author || primaryMsg.from);
+              // El bot solamente responde la primera interacción. No reactiva el hilo para responder subsecuentes.
 
               // Si el caso reportado es que NO les aparece una promoción en el sistema,
               // a los pocos segundos enviamos automáticamente el segundo aviso indicando que ya mandamos la actualización y que recarguen con F5
@@ -840,9 +834,18 @@ function initWhatsApp() {
                   if (!isTargetTech) {
                     knowledge.clearHumanTakeover(targetBranchJid);
                     knowledge.startOrRefreshBotConversation(targetBranchJid, targetBranchJid);
-                    const privGreeting = incidentTarget.isSupervisor
-                      ? `Buenas, como va? Les escribimos de Sistemas por lo que reportaron en el grupo de Procesos así no llenamos de mensajes allá, contanos bien qué pasó o pasanos foto/captura y lo vemos`
-                      : `Buenas ${targetBranchLabel}, te escribo por acá por lo que comentaste en el grupo así no llenamos de mensajes allá, contame bien qué pasó o pasame foto/captura y lo vemos`;
+
+                    // Generar saludo cálido y variado para el privado derivado de Procesos
+                    const hour = new Date().getHours();
+                    const timeGreeting = hour >= 20 || hour < 6 ? 'Buenas noches' : (hour >= 13 ? 'Buenas tardes' : 'Buen día');
+                    const privateVariations = [
+                      `${timeGreeting}, dale ya lo reviso y te confirmo`,
+                      `Buenas! Dale, ya lo miro y te aviso`,
+                      `${timeGreeting}! Dale, ahí lo revisamos y te confirmo`,
+                      `Buenas, dale, ya nos ponemos a verlo y te aviso`,
+                      `${timeGreeting}, dale, ya lo chequeamos y te confirmo`
+                    ];
+                    const privGreeting = privateVariations[Math.floor(Math.random() * privateVariations.length)];
 
                     const privChat = await client.getChatById(targetBranchJid).catch(() => null);
                     const canSendPriv = await simulateHumanReadingAndTyping(privChat, '', privGreeting, targetBranchJid);
@@ -968,6 +971,12 @@ app.get('/api/learned', (req, res) => {
 
 app.get('/api/activity', (req, res) => {
   res.json(activityLog);
+});
+
+app.delete('/api/activity', (req, res) => {
+  activityLog.length = 0;
+  io.emit('activity-history', []);
+  res.json({ success: true, message: 'Historial de mensajes vaciado correctamente.' });
 });
 
 app.post('/api/command', (req, res) => {

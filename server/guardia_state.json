@@ -1,13 +1,11 @@
 {
-  "assigned": "facu",
-  "updatedAt": "2026-11-02T12:25:17.207Z",
-  "lastRotationWeek": "2026-W44",
+  "assigned": "ramiro",
+  "updatedAt": "2026-11-09T12:07:17.581Z",
+  "lastRotationWeek": "2026-W45",
   "weeklyStats": {
-    "totalAlerts": 4,
+    "totalAlerts": 0,
     "weekendAlerts": 0,
-    "weekdayAlerts": 4,
-    "branches": {
-      "No especificada": 4
-    }
+    "weekdayAlerts": 0,
+    "branches": {}
   }
 }

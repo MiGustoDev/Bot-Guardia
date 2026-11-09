@@ -854,12 +854,34 @@ function addToChatHistory(chatId, role, text) {
   }
 }
 
+// IDs de grupos de Procesos / Operaciones (incluye 120363298139858487@g.us)
+const MAIN_OPERATIONS_GROUP_IDS = ['120363298139858487@g.us'];
+
 /**
  * Detecta si el grupo es el grupo principal de Operaciones / Procesos ("Procesos - Mi Gusto").
  */
-function isMainOperationsGroup(chatTitle = '') {
-  const norm = normalizeText(chatTitle);
+function isMainOperationsGroup(chatTitle = '', chatId = '') {
+  if (chatId && MAIN_OPERATIONS_GROUP_IDS.includes(chatId)) return true;
+  const norm = normalizeText(chatTitle || '');
   return norm.includes('procesos') || norm.includes('operaciones');
+}
+
+// IDs o palabras clave del grupo interno de Sistemas donde el bot JAMÁS debe responder ni enviar mensajes
+const INTERNAL_SYSTEMS_GROUP_IDS = ['120363417317392152@g.us'];
+
+function isInternalSystemsGroup(chatId = '', chatTitle = '', customGroupIds = []) {
+  if (chatId) {
+    if (INTERNAL_SYSTEMS_GROUP_IDS.includes(chatId)) return true;
+    if (Array.isArray(customGroupIds) && customGroupIds.includes(chatId)) return true;
+  }
+  const norm = normalizeText(chatTitle || '');
+  if (!norm) return false;
+  // Si el título es el grupo interno de sistemas (ej: "Sistemas", "Sistemas - Mi Gusto", "Guardia Sistemas")
+  // y NO es el grupo de Procesos ni Operaciones
+  if (norm.includes('sistemas') && !norm.includes('procesos') && !norm.includes('operaciones')) {
+    return true;
+  }
+  return false;
 }
 
 // ==========================================
@@ -876,20 +898,42 @@ const manualTakeoverChats = new Map(); // chatId -> timestamp of last human manu
 const HUMAN_TAKEOVER_DURATION_MS = 2 * 60 * 60 * 1000; // 2 horas de ventana de conversación manual en privado
 const GROUP_TAKEOVER_DURATION_MS = 25 * 60 * 1000; // 25 minutos en grupos cuando interviene el humano desde el celu de guardia
 
-// Seguimiento de hilos activos donde el bot ya está conversando con un usuario (para que no tengan que arrobar en cada repregunta)
-const activeBotConversations = new Map(); // chatId -> { senderIds: Set<string>, lastActivityMs: number }
-const ACTIVE_BOT_THREAD_MS = 30 * 60 * 1000; // 30 minutos de charla continua activa
+// Seguimiento de hilos activos donde el bot ya está conversando con un usuario
+// Limitado a un máximo de 2 turnos de respuesta del bot por conversación para no sobre-extender la charla
+// y darles tiempo a Facu y Ramiro de responder y solucionar el problema manualmente
+const activeBotConversations = new Map(); // chatId -> { senderIds: Set<string>, lastActivityMs: number, botTurns: number }
+const ACTIVE_BOT_THREAD_MS = 30 * 60 * 1000; // 30 minutos de charla activa
+const MAX_BOT_TURNS_PER_CONVERSATION = 1; // El bot solamente responde la primera interacción (1 sola respuesta)
 
 function startOrRefreshBotConversation(chatId = '', senderId = '') {
   if (!chatId) return;
   const cleanSender = (senderId || '').split('@')[0];
   let entry = activeBotConversations.get(chatId);
   if (!entry) {
-    entry = { senderIds: new Set(), lastActivityMs: Date.now() };
+    entry = { senderIds: new Set(), lastActivityMs: Date.now(), botTurns: 0 };
     activeBotConversations.set(chatId, entry);
   }
   if (cleanSender) entry.senderIds.add(cleanSender);
   entry.lastActivityMs = Date.now();
+}
+
+function incrementBotTurn(chatId = '') {
+  if (!chatId) return 0;
+  let entry = activeBotConversations.get(chatId);
+  if (!entry) {
+    entry = { senderIds: new Set(), lastActivityMs: Date.now(), botTurns: 1 };
+    activeBotConversations.set(chatId, entry);
+    return 1;
+  }
+  entry.botTurns = (entry.botTurns || 0) + 1;
+  entry.lastActivityMs = Date.now();
+  return entry.botTurns;
+}
+
+function getBotTurnCount(chatId = '') {
+  if (!chatId) return 0;
+  const entry = activeBotConversations.get(chatId);
+  return entry ? (entry.botTurns || 0) : 0;
 }
 
 function isConversationActiveForSender(chatId = '', senderId = '') {
@@ -901,9 +945,20 @@ function isConversationActiveForSender(chatId = '', senderId = '') {
     activeBotConversations.delete(chatId);
     return false;
   }
-  // Una vez iniciada la conversación con el bot en ese chat, cualquier repregunta en ese hilo continúa la charla
-  // hasta que alguien intervenga manualmente desde el celular de la guardia (msg.fromMe)
+  // Si ya respondió 1 vez (primera interacción), el bot no continúa respondiendo para no pisar a los humanos
+  if ((entry.botTurns || 0) >= MAX_BOT_TURNS_PER_CONVERSATION) {
+    return false;
+  }
   return true;
+}
+
+function resetBotTurns(chatId = '') {
+  if (!chatId) return;
+  let entry = activeBotConversations.get(chatId);
+  if (entry) {
+    entry.botTurns = 0;
+    entry.lastActivityMs = Date.now();
+  }
 }
 
 function clearBotConversation(chatId = '') {
@@ -1179,7 +1234,7 @@ async function getContinuousChatResponse({
 
     const branchName = detectedBranchOverride || detectBranch(incomingText, `${senderName} ${chatTitle}`) || 'No especificada';
     const history = getChatHistory(chatId);
-    const isMainOps = isGroup && isMainOperationsGroup(chatTitle);
+    const isMainOps = isGroup && isMainOperationsGroup(chatTitle, chatId);
     const isFollowUpTurn = history.length > 0;
     const friendInfo = detectCloseFriend(senderName);
     let friendNote = '';
@@ -1193,12 +1248,12 @@ async function getContinuousChatResponse({
 
     let groupInstruction = '';
     if (isMainOps) {
-      if (isSupervisor) {
-        const targetLabel = branchName && branchName !== 'No especificada' ? `la sucursal ${branchName}` : 'la sucursal';
-        groupInstruction = ` (NOTA OBLIGATORIA: Estás en el grupo principal "Procesos - Mi Gusto" y quien nos arrobó es una SUPERVISORA DE TIENDA avisándonos por ${targetLabel}. Respondé dejando asentado que tomamos el caso y que ya nos comunicamos por privado DIRECTAMENTE CON LA SUCURSAL para resolverlo, ej: "Buenas, ahi tomamos el caso y ya le escribimos por privado a la sucursal para resolverlo")`;
-      } else {
-        groupInstruction = ' (NOTA OBLIGATORIA: Estás en el grupo principal de Operaciones "Procesos - Mi Gusto" y nos escribió la sucursal. Respondé dejando asentado que se tomó el pedido/caso y que ya le vamos a hablar por privado para resolverlo, para no llenar el grupo de mensajes)';
-      }
+      groupInstruction = ` (REGLA ESTRICTA PARA EL GRUPO DE PROCESOS: En este grupo únicamente saludá de forma súper cortita, limpia y humana, sin dar explicaciones largas ni decir que tomás el tema. Respondé variando entre:
+- "Buenas, que tal!"
+- "Buenas! Que tal?"
+- "Buenas, como va?"
+- "Hola! Buenas, que tal?"
+NUNCA agregues nada más en el grupo, porque la atención técnica se traslada al privado)`;
     } else if (isGroup) {
       if (isFollowUpTurn) {
         groupInstruction = ' (NOTA: Estás continuando la conversación en el grupo con esta persona. Respondé directamente a su repregunta o duda con total seguridad, inteligencia y naturalidad, sin volver a saludar ni repetir que tomamos el caso. Empezá siempre con la primera letra en mayúscula y recordá que AnyDesk solo se usa para comanderas)';
@@ -1211,9 +1266,12 @@ async function getContinuousChatResponse({
         : ' (NOTA: Estás en chat privado 1 a 1. Respondé con inmediatez de forma acertada, inteligente y super servicial para mantener la conversación fluida y adelantar el diagnóstico o solución hasta que el técnico tome el celular. Empezá siempre con la primera letra en mayúscula)';
     }
 
+    const botTurn = getBotTurnCount(chatId);
+    let turnHint = ' (AVISO OBLIGATORIO: Esta es tu ÚNICA interacción de respuesta automática en este caso. Respondé dejando claro que tomamos el tema y que ya lo estamos revisando, pidiendo de entrada foto/screenshot o código de AnyDesk solo si aplica, de modo que Facu o Ramiro puedan continuar manualmente la atención. No hagas preguntas redundantes)';
+
     const userMessage = isGroup
-      ? `[${senderName} en grupo "${chatTitle}" - Sucursal: ${branchName}${groupInstruction}${friendNote}]: ${incomingText}`
-      : `[${senderName} en privado - Sucursal: ${branchName}${groupInstruction}${friendNote}]: ${incomingText}`;
+      ? `[${senderName} en grupo "${chatTitle}" - Sucursal: ${branchName}${groupInstruction}${friendNote}${turnHint}]: ${incomingText}`
+      : `[${senderName} en privado - Sucursal: ${branchName}${groupInstruction}${friendNote}${turnHint}]: ${incomingText}`;
 
     const candidateModels = getOrderedCandidateModels();
     let result = null;
@@ -1587,6 +1645,7 @@ function isPromoVisibilityIssue(incomingText = '', botReplyText = '') {
 module.exports = {
   capitalizeFirstLetter,
   isPromoVisibilityIssue,
+  isInternalSystemsGroup,
   registerBotOutput,
   isBotGeneratedOutput,
   recordIncomingForLearning,
@@ -1598,6 +1657,9 @@ module.exports = {
   recordGroupMessageContext,
   resolveGroupIncidentTarget,
   startOrRefreshBotConversation,
+  incrementBotTurn,
+  getBotTurnCount,
+  resetBotTurns,
   isConversationActiveForSender,
   clearBotConversation,
   markHumanTakeover,
