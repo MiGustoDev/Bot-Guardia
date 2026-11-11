@@ -1248,12 +1248,16 @@ async function getContinuousChatResponse({
 
     let groupInstruction = '';
     if (isMainOps) {
-      groupInstruction = ` (REGLA ESTRICTA PARA EL GRUPO DE PROCESOS: En este grupo únicamente saludá de forma súper cortita, limpia y humana, sin dar explicaciones largas ni decir que tomás el tema. Respondé variando entre:
-- "Buenas, que tal!"
-- "Buenas! Que tal?"
-- "Buenas, como va?"
-- "Hola! Buenas, que tal?"
-NUNCA agregues nada más en el grupo, porque la atención técnica se traslada al privado)`;
+      groupInstruction = ` (REGLA ESTRICTA PARA EL GRUPO DE PROCESOS: En este grupo respondé SIEMPRE con la estructura exacta:
+Saludo inicial cálido con el nombre de la persona (según el momento del día: "Buenas noches [Nombre]!", "Buenas tardes [Nombre]!", "Buen día [Nombre]!" o "Buenas [Nombre]!")
+Seguido en la siguiente línea por la confirmación tranquilizadora:
+"No te preocupes, ya te hablamos por privado para resolver"
+
+Ejemplo exacto de referencia:
+"Buenas noches ${senderName}!
+No te preocupes, ya te hablamos por privado para resolver"
+
+NUNCA des explicaciones técnicas ni soluciones en este grupo, solo esa respuesta concisa y humana de 2 líneas)`;
     } else if (isGroup) {
       if (isFollowUpTurn) {
         groupInstruction = ' (NOTA: Estás continuando la conversación en el grupo con esta persona. Respondé directamente a su repregunta o duda con total seguridad, inteligencia y naturalidad, sin volver a saludar ni repetir que tomamos el caso. Empezá siempre con la primera letra en mayúscula y recordá que AnyDesk solo se usa para comanderas)';

@@ -540,6 +540,45 @@ function initWhatsApp() {
         knowledge.resetBotTurns(fromNumber);
       }
 
+      // Verificar si quien escribe en un grupo desde su número personal es Facu o Ramiro respondiendo (citando) a una sucursal
+      const cleanAuthorId = (msg.author || msg.from || '').split('@')[0];
+      const isPersonalTechAccount =
+        cleanAuthorId.includes('1163704522') ||
+        cleanAuthorId.includes('3876117799') ||
+        /\b(facu|facundo|ramiro|rami)\b/i.test(senderName);
+
+      if (
+        isGroup &&
+        isPersonalTechAccount &&
+        !isMentioned &&
+        msg.hasQuotedMsg &&
+        !incomingText.includes('?') &&
+        chatTitle.trim().toUpperCase() !== 'BOT'
+      ) {
+        try {
+          const quotedMsg = await withTimeout(msg.getQuotedMessage(), 1000, null);
+          if (quotedMsg && !quotedMsg.fromMe && quotedMsg.body) {
+            const learnedFromPersonal = knowledge.learnFromHumanReply(fromNumber, incomingText, quotedMsg.body, senderName);
+            if (learnedFromPersonal) {
+              logActivity('system', `🧠 Auto-Entrenamiento (${senderName})`, quotedMsg.body, `Aprendido: "${incomingText}"`);
+            }
+          }
+        } catch (_) {}
+      }
+
+      // Registrar siempre el mensaje entrante del usuario/sucursal para tener el contexto si un técnico le responde manualmente después
+      knowledge.recordIncomingForLearning(fromNumber, incomingText, senderName);
+
+      // Si es un grupo y NO nos arrobaron, guardamos el mensaje en el buffer de contexto del grupo
+      // (por si una sucursal reportó un problema sin arrobarnos y enseguida nos arroba una supervisora de tienda)
+      if (isGroup && !isMentioned) {
+        knowledge.recordGroupMessageContext(fromNumber, {
+          senderId: msg.author || msg.from,
+          senderName,
+          text: incomingText
+        });
+      }
+
       // El bot SOLAMENTE responde la primera interacción. Si ya respondió en este chat o si un técnico tomó el control, no responder
       if (knowledge.isChatUnderHumanControl(fromNumber)) {
         return;
